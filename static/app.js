@@ -20,8 +20,8 @@ function dropdown(btnId,panelId) {
 }
 dropdown('account-btn','account-panel');
 let themeAccount=null,themeDefault=window.HOME_UI_DEFAULT||'auto';
-function applyTheme(){let mode=themeDefault;try{if(themeAccount)mode=localStorage.getItem('homedash.theme.'+themeAccount)||mode;}catch{}if(mode==='auto')delete document.documentElement.dataset.theme;else document.documentElement.dataset.theme=mode;$('theme-btn').textContent='Appearance: '+mode[0].toUpperCase()+mode.slice(1);}
-$('theme-btn').onclick=()=>{let mode=document.documentElement.dataset.theme||'auto';mode={auto:'light',light:'dark',dark:'auto'}[mode];try{localStorage.setItem('homedash.theme.'+themeAccount,mode);}catch{}if(mode==='auto')delete document.documentElement.dataset.theme;else document.documentElement.dataset.theme=mode;$('theme-btn').textContent='Appearance: '+mode[0].toUpperCase()+mode.slice(1);};applyTheme();
+function applyTheme(){if(themeDefault==='auto')delete document.documentElement.dataset.theme;else document.documentElement.dataset.theme=themeDefault;}
+applyTheme();
 document.querySelectorAll('[data-close]').forEach(button=>button.onclick=()=>button.closest('dialog').close());
 async function init() {
   state=await api('/api/state');themeAccount=state.user?.id||null;themeDefault=state.ui?.theme||'auto';applyTheme();$('auth').hidden=state.logged_in;$('app').hidden=!state.logged_in;

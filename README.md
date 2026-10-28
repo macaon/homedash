@@ -156,4 +156,4 @@ The settings cog sits immediately left of the username and is visible only to ad
 
 ### Default appearance
 
-Settings cog → **User Interface** sets the server default to Auto, Light or Dark. Auto follows the operating system and is the default on fresh installations. Login pages always use the server default; signed-in accounts can choose a personal appearance from the account menu. Personal choices are stored per account in that browser and do not change the login page.
+Settings cog → **User Interface** sets the server default to Auto, Light or Dark. Auto follows the operating system and is the default on fresh installations. The dashboard and login page both follow this setting. Appearance controls are kept in settings rather than the account dropdown.
