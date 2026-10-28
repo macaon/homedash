@@ -1,5 +1,6 @@
 """HomeDash: self-hosted links and read-only service status."""
 from contextlib import contextmanager
+import base64
 import hashlib
 import hmac
 import json
@@ -13,6 +14,8 @@ import ssl
 from functools import lru_cache
 import httpx
 from cryptography.fernet import Fernet
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
 
 from authlib.integrations.starlette_client import OAuth
 from fastapi import FastAPI, Depends, HTTPException, Request
@@ -55,6 +58,7 @@ def db():
 
 with db() as c:
     c.executescript('''
+    CREATE TABLE IF NOT EXISTS trust_certificates (fingerprint TEXT PRIMARY KEY, name TEXT NOT NULL, pem TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password TEXT, admin INTEGER NOT NULL DEFAULT 0, oidc_sub TEXT UNIQUE, version INTEGER NOT NULL DEFAULT 1);
     CREATE TABLE IF NOT EXISTS oidc_links (subject TEXT PRIMARY KEY, user_id TEXT UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE);
@@ -159,6 +163,25 @@ def certificate_pem(value):
     return value
 
 
+def trusted_pem():
+    with db() as c:
+        return '\n'.join(r[0] for r in c.execute('SELECT pem FROM trust_certificates ORDER BY fingerprint'))
+
+
+def certificate_info(row):
+    cert=x509.load_pem_x509_certificate(row['pem'].encode())
+    return {'fingerprint':row['fingerprint'],'name':row['name'],
+            'subject':cert.subject.rfc4514_string(),'issuer':cert.issuer.rfc4514_string(),
+            'expires':cert.not_valid_after_utc.isoformat()}
+
+
+def trust_changed(c):
+    # Invalidate in-flight results too, so checks cannot retain an obsolete trust decision.
+    c.execute('UPDATE connections SET revision=revision+1')
+    c.execute('DELETE FROM snapshots')
+    configured_oauth.cache_clear()
+
+
 def secret_cipher():
     path = DATA / 'secrets.key'
     try:
@@ -188,18 +211,17 @@ def configured_oauth(serialized):
     if value['ca_pem']:
         context.load_verify_locations(cadata=value['ca_pem'])
     registry.register('oidc', server_metadata_url=value['issuer'].rstrip('/')+'/.well-known/openid-configuration',
-        client_id=value['client_id'], client_secret=secret_cipher().decrypt(value['secret_enc'].encode()).decode(),
+        client_id=value['client_id'], client_secret=secret_cipher().decrypt(value['secret_enc'].encode()).decode() if value['secret_enc'] else Path(SECRET_FILE).read_text().strip(),
         client_kwargs={'scope':'openid profile email','code_challenge_method':'S256','verify':context})
     return registry
 
 
 def oidc_runtime():
-    value = saved_options('oidc')
-    if value is None:
-        return oauth, ISSUER, os.environ.get('HOMEDASH_OIDC_ALLOWED_USERS','')
+    value=oidc_options()
     if not value['enabled']:
-        return None, value['issuer'], value['allowed_users']
-    return configured_oauth(json.dumps(value,sort_keys=True)), value['issuer'], value['allowed_users']
+        return None,value['issuer'],value['allowed_users']
+    value={**value,'ca_pem':'\n'.join(filter(None,(value['ca_pem'],trusted_pem())))}
+    return configured_oauth(json.dumps(value,sort_keys=True)),value['issuer'],value['allowed_users']
 
 
 class OIDCSettingsIn(BaseModel):
@@ -226,6 +248,8 @@ def set_oidc(body: OIDCSettingsIn, user=Depends(admin)):
     value['issuer'] = normalize_issuer(value['issuer'])
     certificate_pem(value['ca_pem'])
     old = oidc_options()
+    if 'ca_pem' not in body.model_fields_set:
+        value['ca_pem']=old['ca_pem']
     encrypted = old['secret_enc']
     if body.client_secret:
         encrypted = secret_cipher().encrypt(body.client_secret.encode()).decode()
@@ -473,6 +497,53 @@ class ConnectionIn(GroupIn):
 class ServiceIn(CardIn):
     connection: ConnectionIn | None = None
 
+class TrustUpload(GroupIn):
+    certificate: str = Field(min_length=1,max_length=500000)
+    encoding: str = Field(default='pem',pattern='^(pem|base64)$')
+
+@app.get('/api/settings/trust')
+def list_trust(user=Depends(admin)):
+    with db() as c:
+        return [certificate_info(row) for row in c.execute('SELECT * FROM trust_certificates ORDER BY name,fingerprint')]
+
+@app.post('/api/settings/trust')
+def add_trust(body:TrustUpload,user=Depends(admin)):
+    try:
+        if 'PRIVATE KEY' in body.certificate:
+            raise ValueError('Private key')
+        raw=base64.b64decode(body.certificate,validate=True) if body.encoding=='base64' else body.certificate.encode()
+        if b'PRIVATE KEY' in raw:
+            raise ValueError('Private key')
+        certs=x509.load_pem_x509_certificates(raw) if b'-----BEGIN CERTIFICATE-----' in raw else [x509.load_der_x509_certificate(raw)]
+        if not certs or len(certs)>32:
+            raise ValueError('Bundle size')
+        entries=[(cert.fingerprint(hashes.SHA256()).hex(),body.name.strip(),cert.public_bytes(serialization.Encoding.PEM).decode()) for cert in certs]
+        if not body.name.strip():
+            raise ValueError('Name required')
+        for _,_,pem in entries:
+            certificate_pem(pem)
+    except (ValueError,TypeError):
+        raise HTTPException(400,'Upload public PEM or DER certificates only. Private keys are not accepted.')
+    with db() as c:
+        c.execute('BEGIN IMMEDIATE')
+        existing={r[0] for r in c.execute('SELECT fingerprint FROM trust_certificates')}
+        if len(existing|{r[0] for r in entries})>256:
+            raise HTTPException(400,'Trust store is full (256 certificates)')
+        added=0
+        for entry in entries:
+            added+=c.execute('INSERT OR IGNORE INTO trust_certificates VALUES (?,?,?)',entry).rowcount
+        if added:
+            trust_changed(c)
+    return {'ok':True,'added':added,'certificates':list_trust(user)}
+
+@app.delete('/api/settings/trust/{fingerprint}')
+def remove_trust(fingerprint:str,user=Depends(admin)):
+    with db() as c:
+        if not c.execute('DELETE FROM trust_certificates WHERE fingerprint=?',(fingerprint,)).rowcount:
+            raise HTTPException(404,'Certificate not found')
+        trust_changed(c)
+    return {'ok':True}
+
 class OrderIn(BaseModel):
     ids: list[str] = Field(max_length=1000)
 
@@ -540,14 +611,14 @@ def inline_connection(c,body,user):
     shared=old and c.execute('SELECT count(*) FROM cards WHERE connection_id=?',(old['id'],)).fetchone()[0]>1
     if old and not shared:
         ident=old['id']
-        values=(settings.name,settings.kind,settings.base_url,config,encrypted,settings.ca_pem,settings.interval)
+        values=(settings.name,settings.kind,settings.base_url,config,encrypted,connection_ca(settings,old),settings.interval)
         before=tuple(old[k] for k in ('name','kind','base_url','config','secret_enc','ca_pem','interval'))
         if values!=before:
             c.execute('UPDATE connections SET name=?,kind=?,base_url=?,config=?,secret_enc=?,ca_pem=?,interval=?,revision=revision+1 WHERE id=?',(*values,ident))
             c.execute('DELETE FROM snapshots WHERE connection_id=?',(ident,))
     else:
         ident=secrets.token_hex(12)
-        c.execute('INSERT INTO connections VALUES (?,?,?,?,?,?,?,?,?,?)',(ident,user['id'],settings.name,settings.kind,settings.base_url,config,encrypted,settings.ca_pem,settings.interval,1))
+        c.execute('INSERT INTO connections VALUES (?,?,?,?,?,?,?,?,?,?)',(ident,user['id'],settings.name,settings.kind,settings.base_url,config,encrypted,connection_ca(settings,old),settings.interval,1))
     return ident
 
 @app.post('/api/cards')
@@ -589,6 +660,9 @@ def reorder(collection:str,body:OrderIn,user=Depends(current)):
     return {'ok':True}
 
 
+def connection_ca(body,old=None):
+    return old['ca_pem'] if old and 'ca_pem' not in body.model_fields_set else body.ca_pem
+
 def connection_values(body,old=None):
     certificate_pem(body.ca_pem)
     plugin=REGISTRY[body.kind]
@@ -622,7 +696,7 @@ def edit_connection(ident:str,body:ConnectionIn,user=Depends(current)):
     with db() as c:
         old=owned(c,'connections',ident,user)
         config,encrypted=connection_values(body,old)
-        c.execute('UPDATE connections SET name=?,kind=?,base_url=?,config=?,secret_enc=?,ca_pem=?,interval=?,revision=revision+1 WHERE id=?',(body.name,body.kind,body.base_url,config,encrypted,body.ca_pem,body.interval,ident))
+        c.execute('UPDATE connections SET name=?,kind=?,base_url=?,config=?,secret_enc=?,ca_pem=?,interval=?,revision=revision+1 WHERE id=?',(body.name,body.kind,body.base_url,config,encrypted,connection_ca(body,old),body.interval,ident))
         c.execute('DELETE FROM snapshots WHERE connection_id=?',(ident,))
     return {'ok':True}
 
@@ -654,12 +728,20 @@ async def poll_connection(row,force=False):
             try:
                 secret=secret_cipher().decrypt(row['secret_enc'].encode()).decode() if row['secret_enc'] else ''
                 async with asyncio.timeout(20):
-                    async with connector_client(row['ca_pem']) as http:
+                    async with connector_client('\n'.join(filter(None,(trusted_pem(),row['ca_pem'])))) as http:
                         result=await REGISTRY[row['kind']].poll(http,row['base_url'],json.loads(row['config']),secret)
                 payload={'status':result.status,'summary':result.summary,'metrics':result.metrics,'checked_at':now,'last_success':now}
-            except Exception:
+            except Exception as error:
+                tls_error=False
+                cause=error
+                seen=set()
+                while cause is not None and id(cause) not in seen:
+                    seen.add(id(cause))
+                    if isinstance(cause,ssl.SSLCertVerificationError) or 'CERTIFICATE_VERIFY_FAILED' in str(cause):
+                        tls_error=True
+                    cause=cause.__cause__ or cause.__context__
                 # Do not return exception strings: URLs, provider responses and tokens may be sensitive.
-                payload={'status':'unavailable','summary':'Connection failed. Check the URL, certificate trust, token and API permissions.',
+                payload={'status':'unavailable','summary':('Certificate verification failed. Ask an administrator to upload the service CA certificate under Server settings → Trust.' if tls_error else 'Connection failed. Check the URL, token and API permissions.'),'error_code':'tls_untrusted' if tls_error else 'connection_failed',
                          'metrics':previous.get('metrics',[]),'checked_at':now,'last_success':previous.get('last_success')}
         with db() as c:
             latest=c.execute('SELECT revision FROM connections WHERE id=?',(ident,)).fetchone()

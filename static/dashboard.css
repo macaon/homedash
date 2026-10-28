@@ -3,3 +3,5 @@
 
 .open-link,.open-link:link,.open-link:visited,.open-link:hover,.open-link:active {color:var(--accent-text);text-decoration:none}
 .service-location {display:flex;align-items:center;gap:7px;min-width:0}.availability{display:flex;flex:none;align-items:center}.availability .status-dot {display:block;width:8px;height:8px}.service-check {border-top:1px solid var(--line);padding-top:16px;margin-top:4px}.service-check>label{margin-top:0}.check-advanced{margin:12px 0}.check-advanced summary{margin-bottom:12px}
+
+.trust-certificate{align-items:flex-start;gap:12px}.trust-fingerprint{font-size:10px!important;word-break:break-all}.trust-certificate .sub{display:block;margin-top:4px}

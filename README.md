@@ -9,7 +9,7 @@ A self-hosted homelab dashboard in the Home* design language. Browser links stay
 - Private dashboards per user; local username/password accounts and optional OpenID Connect.
 - Server settings for users and OIDC. Accepts an issuer or its full discovery URL; saved secrets are masked and retained.
 - Bundled read-only connectors: HTTP availability, Home Assistant entity states, and Proxmox cluster overview.
-- Shared backend polling, encrypted API credentials, verified TLS with optional private CA bundles, bounded responses, and stale-data indicators.
+- Shared backend polling, encrypted API credentials, verified TLS with shared server certificate trust, bounded responses, and stale-data indicators.
 
 Docker, OPNsense and Synology are available as **link presets**, not live connectors yet. HomeKit, vacuum and heat-pump entities can be displayed through Home Assistant when that instance exposes them. This version does not control devices or run host commands.
 
@@ -42,7 +42,7 @@ Removing a group keeps its cards under Ungrouped. Removing a saved check keeps a
 
 ## Live connections
 
-Configure checks and live metrics directly in **Add service** or **Edit service**. The check URL initially follows the service URL; API services default to its origin. Select the service type, enter any required entity IDs or token, and expand advanced options for interval and CA trust. Saving the service and its check is atomic.
+Configure checks and live metrics directly in **Add service** or **Edit service**. The check URL initially follows the service URL; API services default to its origin. Select the service type, enter any required entity IDs or token, and expand advanced options for the check interval. Saving the service and its check is atomic.
 
 Basic availability uses a small status dot beside the hostname; hover or focus it for Online/Offline, response details and the last check time. Live API integrations retain their metrics.
 
@@ -82,13 +82,17 @@ Reference: [Proxmox VE API](https://pve.proxmox.com/wiki/Proxmox_VE_API).
 
 ### Private certificate authorities
 
-Connection editors accept a public PEM CA bundle under **Private certificate authority**. Certificate verification stays enabled. API-token connections require HTTPS; put an internal HTTPS proxy in front of a service that only offers HTTP. The browser independently needs to trust the dashboard's certificate.
+Administrators manage shared certificate trust under **Account → Server settings → Trust**. Name an upload and select one or several public PEM/DER certificate files; PEM bundles are supported too. Upload a private CA root once and all service checks and OIDC logins can trust certificates signed by it. Duplicate certificates are ignored. The list shows each certificate's subject, expiry and SHA-256 fingerprint, with a removal action.
+
+Certificate fields are no longer part of the service or OIDC editor. Untrusted certificate failures direct users to the Trust tab. Adding or removing trust automatically invalidates cached results and triggers fresh checks. Standard public roots remain enabled; hostname and expiry verification remain enforced. Previously configured per-service/provider CA bundles are retained for compatibility, while new services use shared trust.
+
+API-token connections require HTTPS; put an internal HTTPS proxy in front of a service that only offers HTTP. This trust store controls HomeDash's outbound requests; browsers independently need to trust the dashboard's own certificate.
 
 ## Accounts and OIDC
 
 The first account is an administrator. Account → Server settings → Users adds or removes other accounts. Users manage their own services, groups and connections. Administrators manage accounts and provider settings; the normal catalog API still returns only their own dashboard.
 
-Under OAuth / OIDC, enter the issuer or discovery URL, client ID, secret and optional provider CA. Register the displayed callback URL with your provider. Blank secret fields retain the existing secret; the browser never receives the saved value. Local password login remains available. An exact preferred-username match links SSO to a local account; the configured provider is trusted to assert that identity. An unmatched SSO identity gets a private, non-administrator account.
+Under OAuth / OIDC, enter the issuer or discovery URL, client ID, secret and upload any private provider CA in Trust. Register the displayed callback URL with your provider. Blank secret fields retain the existing secret; the browser never receives the saved value. Local password login remains available. An exact preferred-username match links SSO to a local account; the configured provider is trusted to assert that identity. An unmatched SSO identity gets a private, non-administrator account.
 
 Optional environment configuration is also supported with `HOMEDASH_OIDC_ISSUER`, `HOMEDASH_OIDC_CLIENT_ID`, `HOMEDASH_OIDC_CLIENT_SECRET_FILE`, `HOMEDASH_OIDC_CA_FILE`, and `HOMEDASH_OIDC_ALLOWED_USERS`. Mount referenced files separately. UI-saved settings take precedence.
 

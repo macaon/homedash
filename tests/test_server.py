@@ -21,6 +21,7 @@ class DashboardTests(unittest.TestCase):
     def setUp(self):
         with server.db() as c:
             c.execute('DELETE FROM users')
+            c.execute('DELETE FROM trust_certificates')
             c.execute("DELETE FROM settings WHERE key='oidc'")
         server.ATTEMPTS.clear()
         server.POLL_LOCKS.clear()
@@ -259,5 +260,93 @@ class DefinitionReloadTests(unittest.TestCase):
             finally:
                 connectors.REGISTRY.pop('custom_reload',None)
                 connectors.JSON_IDS=set();connectors.JSON_SIGNATURE=None
+
+
+class TrustTests(unittest.TestCase):
+    setUp=DashboardTests.setUp
+    connection=DashboardTests.connection
+
+    @staticmethod
+    def certificate(name):
+        from cryptography import x509
+        from cryptography.hazmat.primitives import hashes,serialization
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from cryptography.x509.oid import NameOID
+        from datetime import datetime,timedelta,timezone
+        key=ec.generate_private_key(ec.SECP256R1())
+        subject=x509.Name([x509.NameAttribute(NameOID.COMMON_NAME,name)])
+        now=datetime.now(timezone.utc)
+        cert=x509.CertificateBuilder().subject_name(subject).issuer_name(subject).public_key(key.public_key()).serial_number(x509.random_serial_number()).not_valid_before(now-timedelta(days=1)).not_valid_after(now+timedelta(days=30)).add_extension(x509.BasicConstraints(ca=True,path_length=None),critical=True).sign(key,hashes.SHA256())
+        return cert.public_bytes(serialization.Encoding.PEM).decode()
+
+    def test_multiple_certificates_dedup_and_admin_only(self):
+        pem=self.certificate('Root A')+self.certificate('Root B')
+        r=self.client.post('/api/settings/trust',json={'name':'Homelab roots','certificate':pem})
+        self.assertEqual(r.status_code,200,r.text);self.assertEqual(r.json()['added'],2)
+        self.assertEqual(self.client.post('/api/settings/trust',json={'name':'Again','certificate':pem}).json()['added'],0)
+        listed=self.client.get('/api/settings/trust').json();self.assertEqual(len(listed),2)
+        self.assertTrue(all('expires' in v and 'fingerprint' in v for v in listed))
+        self.client.post('/api/users',json={'username':'bob','password':PASSWORD})
+        other=TestClient(server.app);other.post('/api/login',json={'username':'bob','password':PASSWORD})
+        self.assertEqual(other.get('/api/settings/trust').status_code,403)
+        self.assertEqual(other.post('/api/settings/trust',json={'name':'x','certificate':pem}).status_code,403)
+        self.assertEqual(other.request('DELETE','/api/settings/trust/'+listed[0]['fingerprint'],json={}).status_code,403)
+        self.assertEqual(self.client.request('DELETE','/api/settings/trust/'+listed[0]['fingerprint'],json={}).status_code,200)
+        self.assertEqual(len(self.client.get('/api/settings/trust').json()),1)
+
+    def test_rejects_invalid_and_private_key_even_in_bundle(self):
+        import base64
+        for text in ('not a certificate',self.certificate('Root')+'-----BEGIN PRIVATE KEY-----\nanything\n-----END PRIVATE KEY-----'):
+            for payload in ({'certificate':text},{'certificate':base64.b64encode(text.encode()).decode(),'encoding':'base64'}):
+                self.assertEqual(self.client.post('/api/settings/trust',json={'name':'bad',**payload}).status_code,400)
+        self.assertEqual(self.client.get('/api/settings/trust').json(),[])
+
+    def test_global_trust_reaches_checks_and_rechecks_after_change(self):
+        cid=self.connection()
+        with server.db() as c:row=dict(c.execute('SELECT * FROM connections WHERE id=?',(cid,)).fetchone())
+        seen=[]
+        def transport(ca):
+            seen.append(ca)
+            return httpx.AsyncClient(transport=httpx.MockTransport(lambda r:httpx.Response(200,text='ok')))
+        pem=self.certificate('Global Root')
+        self.client.post('/api/settings/trust',json={'name':'Global','certificate':pem})
+        with patch('server.connector_client',transport):asyncio.run(server.poll_connection(row))
+        self.assertIn(pem.strip(),seen[0])
+        self.assertEqual(self.client.get('/api/status').json()[cid]['status'],'healthy')
+        fp=self.client.get('/api/settings/trust').json()[0]['fingerprint']
+        self.client.request('DELETE','/api/settings/trust/'+fp,json={})
+        self.assertEqual(self.client.get('/api/status').json()[cid]['status'],'pending')
+
+    def test_tls_failure_is_actionable_and_no_raw_error_leaks(self):
+        cid=self.connection()
+        with server.db() as c:row=dict(c.execute('SELECT * FROM connections WHERE id=?',(cid,)).fetchone())
+        def failed(request):raise httpx.ConnectError('CERTIFICATE_VERIFY_FAILED secret-data')
+        with patch('server.connector_client',lambda ca:httpx.AsyncClient(transport=httpx.MockTransport(failed))):
+            result=asyncio.run(server.poll_connection(row,force=True))
+        self.assertEqual(result['error_code'],'tls_untrusted')
+        self.assertIn('Server settings → Trust',result['summary'])
+        self.assertNotIn('secret-data',json.dumps(result))
+
+    def test_der_upload_and_oidc_uses_shared_trust(self):
+        import base64
+        from cryptography import x509
+        from cryptography.hazmat.primitives import serialization
+        pem=self.certificate('Provider CA')
+        der=x509.load_pem_x509_certificate(pem.encode()).public_bytes(serialization.Encoding.DER)
+        r=self.client.post('/api/settings/trust',json={'name':'Provider','certificate':base64.b64encode(der).decode(),'encoding':'base64'})
+        self.assertEqual(r.status_code,200,r.text)
+        self.client.put('/api/settings/oidc',json={'enabled':True,'issuer':'https://id.example.net','client_id':'test','client_secret':'secret'})
+        with patch('server.configured_oauth') as configured:
+            server.oidc_runtime()
+            options=json.loads(configured.call_args[0][0])
+        self.assertIn(pem.strip(),options['ca_pem'])
+
+    def test_legacy_service_ca_is_retained_on_edit(self):
+        pem=self.certificate('Legacy')
+        cid=self.connection(ca_pem=pem)
+        r=self.client.put('/api/connections/'+cid,json={'name':'Renamed','kind':'http','base_url':'https://service.example.net'})
+        self.assertEqual(r.status_code,200)
+        with server.db() as c:self.assertEqual(c.execute('SELECT ca_pem FROM connections WHERE id=?',(cid,)).fetchone()[0],pem)
+
 
 if __name__=='__main__':unittest.main()
