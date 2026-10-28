@@ -188,4 +188,76 @@ class HTTPRedirectTests(unittest.IsolatedAsyncioTestCase):
             result=await REGISTRY['http'].poll(client,'https://example.net',{},'')
         self.assertEqual(result.status,'healthy');self.assertEqual(result.metrics[0]['value'],'302');self.assertEqual(len(calls),1)
 
+
+class InlineServiceTests(unittest.TestCase):
+    setUp=DashboardTests.setUp
+    card=DashboardTests.card
+    connection=DashboardTests.connection
+    def test_atomic_inline_creation_and_validation(self):
+        check={'name':'Portal','kind':'http','base_url':'https://portal.example.net'}
+        aid=self.card(connection=check)
+        catalog=self.client.get('/api/catalog').json()
+        self.assertEqual(len(catalog['connections']),1)
+        self.assertEqual(catalog['cards'][0]['connection_id'],catalog['connections'][0]['id'])
+        before=catalog
+        r=self.client.put('/api/cards/'+aid,json={'name':'Changed','url':'https://changed.example.net','connection':{**check,'kind':'proxmox'}})
+        self.assertEqual(r.status_code,400)
+        self.assertEqual(self.client.get('/api/catalog').json(),before)
+
+    def test_shared_inline_edit_copies_and_retains_token(self):
+        cid=self.connection(kind='proxmox',secret='retain-this-token')
+        a=self.card(connection_id=cid);self.card(name='Second',connection_id=cid)
+        body={'name':'Edited','url':'https://pve.example.net','connection_id':cid,'connection':{'name':'Edited check','kind':'proxmox','base_url':'https://new.example.net'}}
+        r=self.client.put('/api/cards/'+a,json=body);self.assertEqual(r.status_code,200,r.text)
+        catalog=self.client.get('/api/catalog').json();new_id=next(c['connection_id'] for c in catalog['cards'] if c['id']==a)
+        self.assertNotEqual(new_id,cid)
+        with server.db() as c:
+            old=c.execute('SELECT * FROM connections WHERE id=?',(cid,)).fetchone()
+            new=c.execute('SELECT * FROM connections WHERE id=?',(new_id,)).fetchone()
+        self.assertEqual(old['base_url'],'https://service.example.net')
+        self.assertEqual(server.secret_cipher().decrypt(new['secret_enc'].encode()).decode(),'retain-this-token')
+        self.client.put('/api/cards/'+a,json={'name':'No check','url':'https://pve.example.net'})
+        self.assertIsNone(next(c['connection_id'] for c in self.client.get('/api/catalog').json()['cards'] if c['id']==a))
+
+class JSONConnectorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_json_mapping_and_token(self):
+        from connectors import JSONDefinition,JSONConnector
+        definition=JSONDefinition.model_validate({'id':'custom_demo','name':'Demo','path':'/api/status','auth':'bearer','metrics':[{'label':'Temperature','pointer':'/a~1b/0/temp','unit':'°C'}]})
+        def handler(request):
+            self.assertEqual(str(request.url),'https://example.net/api/status')
+            self.assertEqual(request.headers['Authorization'],'Bearer token')
+            return httpx.Response(200,json={'a/b':[{'temp':21}]})
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            result=await JSONConnector(definition).poll(client,'https://example.net',{},'token')
+        self.assertEqual(result.metrics,[{'label':'Temperature','value':'21','unit':'°C'}])
+
+    async def test_json_definition_rejects_cross_origin_and_code(self):
+        from connectors import JSONDefinition
+        base={'id':'custom_demo','name':'Demo','path':'/api','metrics':[{'label':'x','pointer':'/x'}]}
+        for path in ('//evil.example/api','https://evil.example/api','/\\evil','/api\r\nheader'):
+            with self.assertRaises(ValueError):JSONDefinition.model_validate({**base,'path':path})
+        with self.assertRaises(ValueError):JSONDefinition.model_validate({**base,'script':'print(1)'})
+
+class DefinitionReloadTests(unittest.TestCase):
+    def test_hot_reload_and_invalid_edit_retains_last_working(self):
+        import connectors
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'demo.json'
+            value={'id':'custom_reload','name':'First','path':'/api','metrics':[{'label':'x','pointer':'/x'}]}
+            path.write_text(json.dumps(value))
+            try:
+                self.assertTrue(connectors.load_json_connectors(folder))
+                self.assertEqual(connectors.REGISTRY['custom_reload'].name,'First')
+                value['name']='Second version';path.write_text(json.dumps(value))
+                self.assertTrue(connectors.load_json_connectors(folder))
+                self.assertEqual(connectors.REGISTRY['custom_reload'].name,'Second version')
+                path.write_text('{invalid')
+                with self.assertRaises(ValueError):connectors.load_json_connectors(folder)
+                self.assertEqual(connectors.REGISTRY['custom_reload'].name,'Second version')
+                path.unlink();connectors.load_json_connectors(folder)
+                self.assertNotIn('custom_reload',connectors.REGISTRY)
+            finally:
+                connectors.REGISTRY.pop('custom_reload',None)
+                connectors.JSON_IDS=set();connectors.JSON_SIGNATURE=None
+
 if __name__=='__main__':unittest.main()

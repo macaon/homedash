@@ -34,15 +34,19 @@ The example Compose binds loopback by default. Set `HOMEDASH_BIND` to a private 
 
 1. Open **Groups** to create sections such as Infrastructure, Home, or Media.
 2. Choose **Add service**. A preset can fill its name, description and icon; enter your own URL.
-3. Select a group, icon and optionally a live connection.
+3. Select a group and icon. Under **Service type**, choose Link only, Website availability, Home Assistant, Proxmox VE, or another installed service definition. Configure its check directly in the same form.
 4. **Open** launches the service in a new browser tab. The card's **⋯** menu contains Edit, ordering actions and Remove.
 5. Drag cards within their group to reorder. Change a card's group through Edit. Groups have their own up/down ordering controls.
 
-Removing a group keeps its cards under Ungrouped. Removing a connection keeps attached cards as ordinary links.
+Removing a group keeps its cards under Ungrouped. Removing a saved check keeps attached cards as ordinary links.
 
 ## Live connections
 
-Add a connection from the **Connections** tab, then select it when editing a service card. Several cards can share one connection. Each user's connections and credentials remain private to that account.
+Configure checks and live metrics directly in **Add service** or **Edit service**. The check URL initially follows the service URL; API services default to its origin. Select the service type, enter any required entity IDs or token, and expand advanced options for interval and CA trust. Saving the service and its check is atomic.
+
+Basic availability uses a small status dot beside the hostname; hover or focus it for Online/Offline, response details and the last check time. Live API integrations retain their metrics.
+
+Existing shared checks remain available under Account → Manage checks. Editing a shared check from a service creates a separate copy, keeping the other services unchanged. Switching to Link only detaches the check from that card; saved checks can be removed from Manage checks. Each user's connections and credentials remain private to that account.
 
 The server checks each connection at its configured interval (15–3600 seconds; default 60). Browsers retrieve cached results every 15 seconds. **Refresh status** updates the browser from the cache; **Check connection** fetches a result when its interval is due, preventing repeated clicks from hammering a host. No polling occurs in the browser directly against your infrastructure.
 
@@ -107,6 +111,30 @@ Each connector supplies:
 Statuses are `healthy` or `degraded`; the scheduler produces `pending` and `unavailable`. Each metric has `label`, `value` and optional `unit`. Register an instance in `REGISTRY`; the UI discovers it from `/api/plugins` automatically. Use the supplied HTTP client and bounded `fetch` helper. Do not log secrets, return raw errors, make state-changing requests, or bypass TLS. Add connector fixture tests and rebuild the image.
 
 The core handles ownership, configuration forms, encryption, TLS trust, scheduling, caching and card rendering. Future connectors can be added without redesigning the dashboard.
+
+### JSON service definitions: no rebuild or restart
+
+For APIs that only need a GET request and a few scalar values, put a definition in `/data/connectors/*.json`, or set `HOMEDASH_CONNECTORS_DIR` to a mounted directory. There is no JSON editor or importer in the GUI. Definitions are maintained alongside deployment/code files.
+
+See [examples/service-status.json](examples/service-status.json). For that example, the service API would return:
+
+```json
+{"sensors":{"temperature":21.5},"uptime_seconds":12345}
+```
+
+Definitions specify a unique `custom_` ID, a display name, a relative API path, authentication (`none`, `bearer`, or `header`), and up to eight metrics. `header` authentication can set a credential header such as `X-API-Key` using the `header` field. Metric `pointer` values use JSON Pointer syntax, including `~1` for `/` and `~0` for `~`; they can address array elements. Values must be scalars. Do not put tokens or deployment hostnames in definitions: the service editor supplies the base URL and encrypted token.
+
+The server checks this directory every five seconds. Valid changes replace the definition set atomically; invalid edits leave the last working set active. Refresh the dashboard to see a newly added type in the service editor. Existing checks use changed definitions on their next scheduled check. Removing a definition makes its existing checks unavailable until the definition is restored. Keep IDs stable when changing labels or mappings.
+
+For an easily editable host directory, create it and add a read-only bind mount to Compose:
+
+```yaml
+volumes:
+  - homedash-data:/data
+  - ./service-definitions:/data/connectors:ro
+```
+
+Write updates to a temporary non-JSON filename and rename into place when complete. No Python expressions, scripts, custom methods, cross-origin URLs or arbitrary frontend code are accepted. APIs needing a new authentication flow, discovery or protocol logic still need a Python connector and an image update.
 
 ## Development
 

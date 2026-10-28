@@ -403,7 +403,19 @@ async def oidc_callback(request: Request):
 # Dashboard collections and credentials belong to the signed-in user.
 import asyncio
 from contextlib import asynccontextmanager, suppress
-from connectors import REGISTRY, manifest, validate_url, client as connector_client
+from connectors import REGISTRY, manifest, validate_url, load_json_connectors, client as connector_client
+CONNECTORS_DIR=os.environ.get('HOMEDASH_CONNECTORS_DIR', DATA/'connectors')
+
+def refresh_connectors():
+    try:
+        return load_json_connectors(CONNECTORS_DIR)
+    except (ValueError,OSError):
+        # Invalid edits never replace the last working set or interrupt polling.
+        import logging
+        logging.getLogger('homedash').warning('Service definitions could not be reloaded; keeping the last working set')
+        return False
+
+refresh_connectors()
 
 class GroupIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
@@ -458,6 +470,9 @@ class ConnectionIn(GroupIn):
             raise ValueError('Unknown connector')
         return value
 
+class ServiceIn(CardIn):
+    connection: ConnectionIn | None = None
+
 class OrderIn(BaseModel):
     ids: list[str] = Field(max_length=1000)
 
@@ -476,6 +491,7 @@ def public_connection(row):
 
 @app.get('/api/plugins')
 def plugins(user=Depends(current)):
+    refresh_connectors()
     return manifest()
 
 @app.get('/api/catalog')
@@ -514,21 +530,43 @@ def card_references(c,body,user):
     if body.connection_id:
         owned(c,'connections',body.connection_id,user)
 
+def inline_connection(c,body,user):
+    if body.connection is None:
+        return body.connection_id
+    settings=body.connection
+    old=owned(c,'connections',body.connection_id,user) if body.connection_id else None
+    config,encrypted=connection_values(settings,old)
+    # Editing a shared check from a card must not change other cards.
+    shared=old and c.execute('SELECT count(*) FROM cards WHERE connection_id=?',(old['id'],)).fetchone()[0]>1
+    if old and not shared:
+        ident=old['id']
+        values=(settings.name,settings.kind,settings.base_url,config,encrypted,settings.ca_pem,settings.interval)
+        before=tuple(old[k] for k in ('name','kind','base_url','config','secret_enc','ca_pem','interval'))
+        if values!=before:
+            c.execute('UPDATE connections SET name=?,kind=?,base_url=?,config=?,secret_enc=?,ca_pem=?,interval=?,revision=revision+1 WHERE id=?',(*values,ident))
+            c.execute('DELETE FROM snapshots WHERE connection_id=?',(ident,))
+    else:
+        ident=secrets.token_hex(12)
+        c.execute('INSERT INTO connections VALUES (?,?,?,?,?,?,?,?,?,?)',(ident,user['id'],settings.name,settings.kind,settings.base_url,config,encrypted,settings.ca_pem,settings.interval,1))
+    return ident
+
 @app.post('/api/cards')
-def add_card(body:CardIn,user=Depends(current)):
+def add_card(body:ServiceIn,user=Depends(current)):
     ident=secrets.token_hex(12)
     with db() as c:
         card_references(c,body,user)
+        connection_id=inline_connection(c,body,user)
         position=c.execute('SELECT COALESCE(MAX(position),-1)+1 FROM cards WHERE owner=?',(user['id'],)).fetchone()[0]
-        c.execute('INSERT INTO cards VALUES (?,?,?,?,?,?,?,?,?)',(ident,user['id'],body.group_id,body.name,body.url,body.description,body.icon,body.connection_id,position))
+        c.execute('INSERT INTO cards VALUES (?,?,?,?,?,?,?,?,?)',(ident,user['id'],body.group_id,body.name,body.url,body.description,body.icon,connection_id,position))
     return {'id':ident}
 
 @app.put('/api/cards/{ident}')
-def edit_card(ident:str,body:CardIn,user=Depends(current)):
+def edit_card(ident:str,body:ServiceIn,user=Depends(current)):
     with db() as c:
         owned(c,'cards',ident,user)
         card_references(c,body,user)
-        c.execute('UPDATE cards SET group_id=?,name=?,url=?,description=?,icon=?,connection_id=? WHERE id=?',(body.group_id,body.name,body.url,body.description,body.icon,body.connection_id,ident))
+        connection_id=inline_connection(c,body,user)
+        c.execute('UPDATE cards SET group_id=?,name=?,url=?,description=?,icon=?,connection_id=? WHERE id=?',(body.group_id,body.name,body.url,body.description,body.icon,connection_id,ident))
     return {'ok':True}
 
 @app.delete('/api/cards/{ident}')
@@ -650,6 +688,7 @@ async def test_connection(ident:str,user=Depends(current)):
 
 async def poll_loop():
     while True:
+        refresh_connectors()
         with db() as c:
             rows=[dict(row) for row in c.execute('SELECT * FROM connections')]
         await asyncio.gather(*(poll_connection(row) for row in rows))

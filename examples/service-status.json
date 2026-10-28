@@ -1,0 +1,11 @@
+{
+  "id": "custom_service_status",
+  "name": "Custom service status",
+  "description": "Read temperature and uptime from a service JSON endpoint.",
+  "path": "/api/status",
+  "auth": "bearer",
+  "metrics": [
+    {"label": "Temperature", "pointer": "/sensors/temperature", "unit": "°C"},
+    {"label": "Uptime", "pointer": "/uptime_seconds", "unit": "s"}
+  ]
+}

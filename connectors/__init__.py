@@ -92,7 +92,7 @@ class Proxmox:
 REGISTRY = {plugin.id:plugin for plugin in (HTTP(), HomeAssistant(), Proxmox())}
 
 def manifest():
-    return [{'id':p.id,'name':p.name,'description':p.description,'secret_label':p.secret_label,'fields':p.fields} for p in REGISTRY.values()]
+    return [{'id':p.id,'name':p.name,'description':p.description,'secret_label':p.secret_label,'fields':p.fields} for p in list(REGISTRY.values())]
 
 def validate_url(value):
     parsed=urlsplit(value.strip())
@@ -107,3 +107,100 @@ def client(ca_pem):
     if ca_pem:
         context.load_verify_locations(cadata=ca_pem)
     return httpx.AsyncClient(verify=context,timeout=httpx.Timeout(8),follow_redirects=False,trust_env=False)
+
+# JSON definitions describe a bounded GET + metric mapping, never executable code.
+from pathlib import Path
+from typing import Literal
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+class JSONMetric(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    label: str = Field(min_length=1,max_length=80)
+    pointer: str = Field(min_length=1,max_length=256)
+    unit: str = Field(default='',max_length=20)
+    @field_validator('pointer')
+    @classmethod
+    def pointer_valid(cls,value):
+        if not value.startswith('/') or re.search(r'~(?![01])',value):
+            raise ValueError('Use a JSON Pointer such as /data/temperature')
+        return value
+
+class JSONDefinition(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    id: str = Field(pattern=r'^custom_[a-z0-9_]{2,40}$')
+    name: str = Field(min_length=1,max_length=80)
+    description: str = Field(default='Read live metrics from a JSON API.',max_length=500)
+    path: str = Field(min_length=1,max_length=1024)
+    auth: Literal['none','bearer','header'] = 'none'
+    header: str = Field(default='X-API-Key',pattern=r'^[A-Za-z][A-Za-z0-9-]{0,63}$')
+    metrics: list[JSONMetric] = Field(min_length=1,max_length=8)
+    @field_validator('path')
+    @classmethod
+    def path_valid(cls,value):
+        parsed=urlsplit(value)
+        if (not value.startswith('/') or value.startswith('//') or parsed.scheme or parsed.netloc
+                or parsed.fragment or '\\' in value or any(ord(c)<33 for c in value)):
+            raise ValueError('Path must stay on the configured service origin')
+        return value
+    @field_validator('header')
+    @classmethod
+    def header_valid(cls,value):
+        if value.lower() in ('host','cookie','content-length','connection','transfer-encoding','proxy-authorization'):
+            raise ValueError('Unsupported credential header')
+        return value
+
+class JSONConnector:
+    fields=[]
+    def __init__(self,definition):
+        self.definition=definition
+        self.id=definition.id
+        self.name=definition.name
+        self.description=definition.description
+        self.secret_label='API token' if definition.auth!='none' else ''
+    def validate(self,config):
+        return {}
+    async def poll(self,client,base,config,secret):
+        definition=self.definition
+        headers={}
+        if definition.auth=='bearer':headers['Authorization']='Bearer '+secret
+        if definition.auth=='header':headers[definition.header]=secret
+        document=await fetch(client,base+definition.path,headers)
+        metrics=[]
+        for metric in definition.metrics:
+            value=document
+            for segment in metric.pointer[1:].split('/'):
+                segment=segment.replace('~1','/').replace('~0','~')
+                value=value[int(segment)] if isinstance(value,list) else value[segment]
+            if not isinstance(value,(str,int,float,bool)) and value is not None:
+                raise ValueError('Metric must be a scalar')
+            metrics.append({'label':metric.label,'value':str(value)[:100] if value is not None else '—','unit':metric.unit})
+        return Result('healthy','Live metrics available',metrics)
+
+JSON_SIGNATURE=None
+JSON_IDS=set()
+
+def load_json_connectors(directory):
+    global JSON_SIGNATURE, JSON_IDS
+    directory=Path(directory)
+    directory.mkdir(parents=True,exist_ok=True)
+    paths=sorted(directory.glob('*.json'))
+    signature=(str(directory),tuple((p.name,p.stat().st_mtime_ns,p.stat().st_size) for p in paths))
+    if signature==JSON_SIGNATURE:
+        return False
+    loaded={}
+    for path in paths:
+        if path.stat().st_size>65536:
+            raise ValueError(f'Connector definition too large: {path.name}')
+        try:
+            definition=JSONDefinition.model_validate_json(path.read_text())
+        except ValueError:
+            raise ValueError(f'Invalid connector definition: {path.name}') from None
+        if (definition.id in REGISTRY and definition.id not in JSON_IDS) or definition.id in loaded:
+            raise ValueError(f'Duplicate connector ID in {path.name}')
+        loaded[definition.id]=JSONConnector(definition)
+    for ident in JSON_IDS-set(loaded):
+        REGISTRY.pop(ident,None)
+    REGISTRY.update(loaded)
+    JSON_IDS=set(loaded)
+    JSON_SIGNATURE=signature
+    return True
