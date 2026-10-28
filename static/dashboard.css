@@ -7,3 +7,5 @@
 .trust-certificate{align-items:flex-start;gap:12px}.trust-fingerprint{font-size:10px!important;word-break:break-all}.trust-certificate .sub{display:block;margin-top:4px}
 
 .login-actions{display:grid;gap:10px;margin-top:18px}.login-actions>button,.sso-login{display:flex;align-items:center;justify-content:center;box-sizing:border-box;width:100%;min-height:40px;padding:9px 14px;font:inherit;line-height:1.4;border-radius:8px}.sso-login,.sso-login:visited{border:1px solid var(--line);background:var(--card);color:var(--text);text-decoration:none;font-weight:600}.sso-login:hover{background:var(--hover);color:var(--text);text-decoration:none}
+
+.settings-toggle{display:inline-grid;place-items:center;width:36px;height:36px;padding:7px;border:0;background:transparent;color:var(--muted)}.settings-toggle:hover{background:var(--hover);color:var(--text)}

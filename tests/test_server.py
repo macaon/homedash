@@ -349,4 +349,19 @@ class TrustTests(unittest.TestCase):
         with server.db() as c:self.assertEqual(c.execute('SELECT ca_pem FROM connections WHERE id=?',(cid,)).fetchone()[0],pem)
 
 
+
+class CheckPollingTests(unittest.TestCase):
+    setUp=DashboardTests.setUp
+    connection=DashboardTests.connection
+    card=DashboardTests.card
+    def test_only_attached_checks_are_polled(self):
+        from unittest.mock import AsyncMock
+        detached=self.connection(name='Detached')
+        attached=self.connection(name='Attached')
+        self.card(connection_id=attached)
+        poll=AsyncMock()
+        with patch('server.poll_connection',poll),patch('server.asyncio.sleep',side_effect=asyncio.CancelledError):
+            with self.assertRaises(asyncio.CancelledError):asyncio.run(server.poll_loop())
+        self.assertEqual([call.args[0]['id'] for call in poll.call_args_list],[attached])
+
 if __name__=='__main__':unittest.main()

@@ -46,9 +46,9 @@ Configure checks and live metrics directly in **Add service** or **Edit service*
 
 Basic availability uses a small status dot beside the hostname; hover or focus it for Online/Offline, response details and the last check time. Live API integrations retain their metrics.
 
-Existing shared checks remain available under Account → Manage checks. Editing a shared check from a service creates a separate copy, keeping the other services unchanged. Switching to Link only detaches the check from that card; saved checks can be removed from Manage checks. Each user's connections and credentials remain private to that account.
+Saved checks can be reused from the service-type dropdown in Add/Edit service. Unattached checks remain saved but are not polled. Editing a shared check from a service creates a separate copy, keeping the other services unchanged. Switching to Link only detaches the check from that card; the detached check stays available for reuse. Each user's connections and credentials remain private to that account.
 
-The server checks each connection at its configured interval (15–3600 seconds; default 60). Browsers retrieve cached results every 15 seconds. **Refresh status** updates the browser from the cache; **Check connection** fetches a result when its interval is due, preventing repeated clicks from hammering a host. No polling occurs in the browser directly against your infrastructure.
+The server checks each connection at its configured interval (15–3600 seconds; default 60). Browsers retrieve cached results every 15 seconds. **Refresh status** updates the browser from the cache; checks run only while at least one service uses them. No polling occurs in the browser directly against your infrastructure.
 
 Errors show Unavailable without exposing provider responses or credentials. The last successful metrics remain visible and are labelled stale. Checks time out, do not follow redirects, and use at most four concurrent network requests. A connection edit invalidates its prior snapshot.
 
@@ -82,7 +82,7 @@ Reference: [Proxmox VE API](https://pve.proxmox.com/wiki/Proxmox_VE_API).
 
 ### Private certificate authorities
 
-Administrators manage shared certificate trust under **Account → Server settings → Trust**. Name an upload and select one or several public PEM/DER certificate files; PEM bundles are supported too. Upload a private CA root once and all service checks and OIDC logins can trust certificates signed by it. Duplicate certificates are ignored. The list shows each certificate's subject, expiry and SHA-256 fingerprint, with a removal action.
+Administrators manage shared certificate trust under **settings cog → Trust**. Name an upload and select one or several public PEM/DER certificate files; PEM bundles are supported too. Upload a private CA root once and all service checks and OIDC logins can trust certificates signed by it. Duplicate certificates are ignored. The list shows each certificate's subject, expiry and SHA-256 fingerprint, with a removal action.
 
 Certificate fields are no longer part of the service or OIDC editor. Untrusted certificate failures direct users to the Trust tab. Adding or removing trust automatically invalidates cached results and triggers fresh checks. Standard public roots remain enabled; hostname and expiry verification remain enforced. Previously configured per-service/provider CA bundles are retained for compatibility, while new services use shared trust.
 
@@ -90,7 +90,7 @@ API-token connections require HTTPS; put an internal HTTPS proxy in front of a s
 
 ## Accounts and OIDC
 
-The first account is an administrator. Account → Server settings → Users adds or removes other accounts. Users manage their own services, groups and connections. Administrators manage accounts and provider settings; the normal catalog API still returns only their own dashboard.
+The first account is an administrator. Settings cog → Users adds or removes other accounts. Users manage their own services, groups and connections. Administrators manage accounts and provider settings; the normal catalog API still returns only their own dashboard.
 
 Under OAuth / OIDC, enter the issuer or discovery URL, client ID, secret and upload any private provider CA in Trust. Register the displayed callback URL with your provider. Blank secret fields retain the existing secret; the browser never receives the saved value. Local password login remains available. An exact preferred-username match links SSO to a local account; the configured provider is trusted to assert that identity. An unmatched SSO identity gets a private, non-administrator account.
 
@@ -151,3 +151,5 @@ node --check static/app.js
 ```
 
 Tests use temporary databases and mocked connector APIs. They cover account boundaries, ordering, cascading deletes, secret retention, OIDC settings, caching, stale metrics and connector responses. Actual Home Assistant/Proxmox access requires deployment-specific URLs, tokens and certificate trust; no credentials ship in this project.
+
+The settings cog sits immediately left of the username and is visible only to administrators. Theme, password and log out stay in the account menu.
