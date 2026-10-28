@@ -1,0 +1,22 @@
+services:
+  homedash:
+    image: ${HOMEDASH_IMAGE:-homedash:latest}
+    build:
+      context: .
+      dockerfile: Containerfile
+    ports:
+      - "${HOMEDASH_BIND:-127.0.0.1}:${HOMEDASH_PORT:-8790}:8080"
+    environment:
+      HOMEDASH_PUBLIC_URL: ${HOMEDASH_PUBLIC_URL:-http://127.0.0.1:8790}
+      HOMEDASH_OIDC_ISSUER: ${HOMEDASH_OIDC_ISSUER:-}
+      HOMEDASH_OIDC_CLIENT_ID: ${HOMEDASH_OIDC_CLIENT_ID:-}
+      HOMEDASH_OIDC_CLIENT_SECRET_FILE: ${HOMEDASH_OIDC_CLIENT_SECRET_FILE:-}
+    volumes:
+      - homedash-data:/data
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+volumes:
+  homedash-data:
