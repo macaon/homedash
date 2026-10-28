@@ -19,7 +19,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 
 from authlib.integrations.starlette_client import OAuth
 from fastapi import FastAPI, Depends, HTTPException, Request
-from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, RedirectResponse, Response, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from urllib.parse import urlsplit
 from pydantic import BaseModel, Field, field_validator
@@ -224,6 +224,17 @@ def oidc_runtime():
     return configured_oauth(json.dumps(value,sort_keys=True)),value['issuer'],value['allowed_users']
 
 
+def ui_options():
+    return saved_options('ui') or {'theme':'auto'}
+
+class UISettingsIn(BaseModel):
+    theme: str = Field(default='auto',pattern='^(auto|light|dark)$')
+
+@app.put('/api/settings/ui')
+def set_ui(body:UISettingsIn,user=Depends(admin)):
+    store_options('ui',body.model_dump())
+    return ui_options()
+
 class OIDCSettingsIn(BaseModel):
     enabled: bool = False
     issuer: str = Field(default='', max_length=2048)
@@ -236,7 +247,7 @@ class OIDCSettingsIn(BaseModel):
 @app.get('/api/settings')
 def server_settings(user=Depends(admin)):
     oidc = oidc_options()
-    return {'oidc':{k:v for k,v in oidc.items() if k != 'secret_enc'},
+    return {'ui':ui_options(), 'oidc':{k:v for k,v in oidc.items() if k != 'secret_enc'},
             'oidc_secret_configured':bool(oidc['secret_enc'] or (saved_options('oidc') is None and SECRET_FILE)),
             'callback_url':BASE+'/auth/callback'}
 
@@ -292,7 +303,7 @@ def state(request: Request):
         user = None
     with db() as c:
         setup = c.execute('SELECT count(*) FROM users').fetchone()[0] == 0
-    return {'logged_in':bool(user), 'user':public_user(user) if user else None, 'setup_needed':setup, 'sso':bool(oidc_runtime()[0])}
+    return {'logged_in':bool(user), 'user':public_user(user) if user else None, 'setup_needed':setup, 'sso':bool(oidc_options()['enabled']), 'ui':ui_options()}
 
 @app.post('/api/setup')
 def setup(body: Login, request: Request):
@@ -796,6 +807,6 @@ def health():
 
 @app.get('/')
 def index():
-    return FileResponse(ROOT/'static/index.html')
+    return HTMLResponse((ROOT/'static/index.html').read_text().replace('__HOME_THEME__',ui_options()['theme']))
 
 app.mount('/static',StaticFiles(directory=ROOT/'static'),name='static')

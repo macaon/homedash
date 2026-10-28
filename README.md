@@ -153,3 +153,7 @@ node --check static/app.js
 Tests use temporary databases and mocked connector APIs. They cover account boundaries, ordering, cascading deletes, secret retention, OIDC settings, caching, stale metrics and connector responses. Actual Home Assistant/Proxmox access requires deployment-specific URLs, tokens and certificate trust; no credentials ship in this project.
 
 The settings cog sits immediately left of the username and is visible only to administrators. Theme, password and log out stay in the account menu.
+
+### Default appearance
+
+Settings cog → **User Interface** sets the server default to Auto, Light or Dark. Auto follows the operating system and is the default on fresh installations. Login pages always use the server default; signed-in accounts can choose a personal appearance from the account menu. Personal choices are stored per account in that browser and do not change the login page.

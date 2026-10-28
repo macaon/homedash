@@ -19,12 +19,12 @@ function dropdown(btnId,panelId) {
   document.addEventListener('keydown',e=>{if(e.key==='Escape')close();});
 }
 dropdown('account-btn','account-panel');
-const effectiveTheme=()=>document.documentElement.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
-const syncTheme=()=>$('theme-btn').textContent=effectiveTheme()==='dark'?'Light mode':'Dark mode';
-$('theme-btn').onclick=()=>{const next=effectiveTheme()==='dark'?'light':'dark';document.documentElement.dataset.theme=next;try{localStorage.setItem('theme',next);}catch(e){}syncTheme();};syncTheme();
+let themeAccount=null,themeDefault=window.HOME_UI_DEFAULT||'auto';
+function applyTheme(){let mode=themeDefault;try{if(themeAccount)mode=localStorage.getItem('homedash.theme.'+themeAccount)||mode;}catch{}if(mode==='auto')delete document.documentElement.dataset.theme;else document.documentElement.dataset.theme=mode;$('theme-btn').textContent='Appearance: '+mode[0].toUpperCase()+mode.slice(1);}
+$('theme-btn').onclick=()=>{let mode=document.documentElement.dataset.theme||'auto';mode={auto:'light',light:'dark',dark:'auto'}[mode];try{localStorage.setItem('homedash.theme.'+themeAccount,mode);}catch{}if(mode==='auto')delete document.documentElement.dataset.theme;else document.documentElement.dataset.theme=mode;$('theme-btn').textContent='Appearance: '+mode[0].toUpperCase()+mode.slice(1);};applyTheme();
 document.querySelectorAll('[data-close]').forEach(button=>button.onclick=()=>button.closest('dialog').close());
 async function init() {
-  state=await api('/api/state');$('auth').hidden=state.logged_in;$('app').hidden=!state.logged_in;
+  state=await api('/api/state');themeAccount=state.user?.id||null;themeDefault=state.ui?.theme||'auto';applyTheme();$('auth').hidden=state.logged_in;$('app').hidden=!state.logged_in;
   if(!state.logged_in) {
     document.querySelectorAll('dialog[open]').forEach(d=>d.close());
     $('auth-hint').textContent=state.setup_needed?'Create the first administrator account. Use a password of at least 12 characters.':'Log in to your dashboard.';
@@ -43,8 +43,8 @@ $('auth-form').onsubmit=async e=>{e.preventDefault();$('auth-error').textContent
 $('logout-btn').onclick=async()=>{try{await api('/api/logout','POST');await init();}catch(e){toast(e.message,true);}};
 $('password-btn').onclick=()=>editor('Change password','<label>Current password<input id="f-current" type="password" autocomplete="current-password" required></label><label>New password<input id="f-password" type="password" autocomplete="new-password" minlength="12" required></label><label>Repeat new password<input id="f-repeat" type="password" autocomplete="new-password" minlength="12" required></label><p class="mini">Use at least 12 characters. Other sessions will be signed out.</p>',async()=>{if($('f-password').value!==$('f-repeat').value)throw new Error('Passwords do not match.');await api('/api/password','POST',{current:$('f-current').value,new:$('f-password').value});toast('Password updated.');});
 async function userList(){const users=await api('/api/users');$('user-list').innerHTML=users.map(u=>`<div class="row-item"><div class="main"><span class="title">${esc(u.username)}</span><span class="sub">${u.admin?'Administrator':'User'} · ${u.local?'Local account':'Single sign-on'}</span></div>${u.id!==state.user.id?`<button class="ghost danger" data-remove-user="${u.id}">Remove</button>`:''}</div>`).join('');document.querySelectorAll('[data-remove-user]').forEach(b=>b.onclick=()=>confirmRemove('Remove this user and all their dashboard cards and connections?',async()=>{await api('/api/users/'+b.dataset.removeUser,'DELETE');await userList();}));}
-function settingsTab(name){for(const tab of ['trust','oidc','users']){$('settings-'+tab).hidden=tab!==name;$('settings-'+tab+'-tab').setAttribute('aria-selected',String(tab===name));}}
-for(const name of ['trust','oidc','users'])$('settings-'+name+'-tab').onclick=()=>settingsTab(name);
+function settingsTab(name){for(const tab of ['ui','trust','oidc','users']){$('settings-'+tab).hidden=tab!==name;$('settings-'+tab+'-tab').setAttribute('aria-selected',String(tab===name));}}
+for(const name of ['ui','trust','oidc','users'])$('settings-'+name+'-tab').onclick=()=>settingsTab(name);
 function renderOIDC(settings){
  $('oidc-enabled').checked=settings.oidc.enabled;$('oidc-issuer').value=settings.oidc.issuer;$('oidc-client').value=settings.oidc.client_id;
  $('oidc-secret').value='';$('oidc-secret').placeholder=settings.oidc_secret_configured?'••••••••••••':'';
@@ -53,8 +53,9 @@ function renderOIDC(settings){
  $('oidc-error').textContent='';
 }
 
-async function loadSettings(){const settings=await api('/api/settings');renderOIDC(settings);renderTrust(await api('/api/settings/trust'));}
-$('users-btn').onclick=async()=>{try{await Promise.all([userList(),loadSettings()]);settingsTab('trust');$('users').showModal();}catch(e){toast(e.message,true);}};
+async function loadSettings(){const settings=await api('/api/settings');$('ui-theme').value=settings.ui.theme;renderOIDC(settings);renderTrust(await api('/api/settings/trust'));}
+$('users-btn').onclick=async()=>{try{await Promise.all([userList(),loadSettings()]);settingsTab('ui');$('users').showModal();}catch(e){toast(e.message,true);}};
+$('ui-form').onsubmit=async event=>{event.preventDefault();const button=event.submitter;button.disabled=true;$('ui-error').textContent='';try{const value=await api('/api/settings/ui','PUT',{theme:$('ui-theme').value});themeDefault=value.theme;applyTheme();toast('Default appearance saved, including the login page.');}catch(error){$('ui-error').textContent=error.message;}finally{button.disabled=false;}};
 $('oidc-form').onsubmit=async e=>{e.preventDefault();const button=e.submitter;button.disabled=true;try{const result=await api('/api/settings/oidc','PUT',{enabled:$('oidc-enabled').checked,issuer:$('oidc-issuer').value,client_id:$('oidc-client').value,client_secret:$('oidc-secret').value,allowed_users:$('oidc-allowed').value});renderOIDC(result.settings);toast('OAuth settings saved. Local login remains available.');}catch(error){$('oidc-error').textContent=error.message;}finally{button.disabled=false;}};
 $('add-user').onclick=()=>editor('Add user','<label>Username<input id="f-name" autocomplete="off" required maxlength="64"></label><label>Initial password<input id="f-password" type="password" autocomplete="new-password" minlength="12" required></label><label class="inline"><input id="f-admin" type="checkbox">Administrator</label>',async()=>{await api('/api/users','POST',{username:$('f-name').value,password:$('f-password').value,admin:$('f-admin').checked});await userList();});
 

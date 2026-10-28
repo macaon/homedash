@@ -22,7 +22,7 @@ class DashboardTests(unittest.TestCase):
         with server.db() as c:
             c.execute('DELETE FROM users')
             c.execute('DELETE FROM trust_certificates')
-            c.execute("DELETE FROM settings WHERE key='oidc'")
+            c.execute("DELETE FROM settings WHERE key IN ('oidc','ui')")
         server.ATTEMPTS.clear()
         server.POLL_LOCKS.clear()
         self.client=TestClient(server.app)
@@ -363,5 +363,17 @@ class CheckPollingTests(unittest.TestCase):
         with patch('server.poll_connection',poll),patch('server.asyncio.sleep',side_effect=asyncio.CancelledError):
             with self.assertRaises(asyncio.CancelledError):asyncio.run(server.poll_loop())
         self.assertEqual([call.args[0]['id'] for call in poll.call_args_list],[attached])
+
+
+class UISettingsTests(unittest.TestCase):
+    setUp=DashboardTests.setUp
+    def test_auto_default_and_anonymous_login_theme(self):
+        anonymous=TestClient(server.app)
+        self.assertEqual(anonymous.get('/api/state').json()['ui']['theme'],'auto')
+        self.assertEqual(self.client.put('/api/settings/ui',json={'theme':'light'}).status_code,200)
+        self.assertIn("HOME_UI_DEFAULT='light'",anonymous.get('/').text)
+        self.assertEqual(anonymous.get('/api/state').json()['ui']['theme'],'light')
+        self.assertEqual(anonymous.put('/api/settings/ui',json={'theme':'dark'}).status_code,401)
+        self.assertEqual(self.client.put('/api/settings/ui',json={'theme':'bad'}).status_code,422)
 
 if __name__=='__main__':unittest.main()
