@@ -157,3 +157,5 @@ The settings cog sits immediately left of the username and is visible only to ad
 ### Default appearance
 
 Settings cog → **User Interface** sets the server default to Auto, Light or Dark. Auto follows the operating system and is the default on fresh installations. The dashboard and login page both follow this setting. Appearance controls are kept in settings rather than the account dropdown.
+
+Additional outbound CA certificates are managed under **Server settings → Trust**. The same store supplies both service checks and OIDC; the OAuth / OIDC tab links there rather than duplicating certificate fields. Public system roots remain trusted.
