@@ -54,22 +54,12 @@ function renderOIDC(settings){
  $('oidc-error').textContent='';
 }
 
-async function loadSettings(){const settings=await api('/api/settings');$('ui-theme').value=settings.ui.theme;renderOIDC(settings);renderTrust(await api('/api/settings/trust'));}
+const trustView=HomeTrust.mount($("outbound-trust"),{api,scope:'Additional outbound trust for HomeDash, used by service checks and OIDC login.'});
+async function loadSettings(){const settings=await api('/api/settings');$('ui-theme').value=settings.ui.theme;renderOIDC(settings);await trustView.load();}
 $('users-btn').onclick=async()=>{try{await Promise.all([userList(),loadSettings()]);settingsTab('ui');$('users').showModal();}catch(e){toast(e.message,true);}};
 $('ui-form').onsubmit=async event=>{event.preventDefault();const button=event.submitter;button.disabled=true;$('ui-error').textContent='';try{const value=await api('/api/settings/ui','PUT',{theme:$('ui-theme').value});themeDefault=value.theme;applyTheme();toast('Default appearance saved, including the login page.');}catch(error){$('ui-error').textContent=error.message;}finally{button.disabled=false;}};
 $('oidc-form').onsubmit=async e=>{e.preventDefault();const button=e.submitter;button.disabled=true;try{const result=await api('/api/settings/oidc','PUT',{enabled:$('oidc-enabled').checked,issuer:$('oidc-issuer').value,client_id:$('oidc-client').value,client_secret:$('oidc-secret').value,allowed_users:$('oidc-allowed').value});renderOIDC(result.settings);toast('OAuth settings saved. Local login remains available.');}catch(error){$('oidc-error').textContent=error.message;}finally{button.disabled=false;}};
 $('add-user').onclick=()=>editor('Add user','<label>Username<input id="f-name" autocomplete="off" required maxlength="64"></label><label>Initial password<input id="f-password" type="password" autocomplete="new-password" minlength="12" required></label><label class="inline"><input id="f-admin" type="checkbox">Administrator</label>',async()=>{await api('/api/users','POST',{username:$('f-name').value,password:$('f-password').value,admin:$('f-admin').checked});await userList();});
-
-function renderTrust(certificates){
- $('trust-list').innerHTML=certificates.length?certificates.map(cert=>`<div class="row-item trust-certificate"><div class="main"><span class="title">${esc(cert.name)}</span><span class="sub">${esc(cert.subject)} · expires ${esc(new Date(cert.expires).toLocaleDateString())}</span><span class="sub mono trust-fingerprint" title="SHA-256 fingerprint">${esc(cert.fingerprint.match(/../g).join(':'))}</span></div><button type="button" class="ghost danger" data-remove-cert="${cert.fingerprint}">Remove</button></div>`).join(''):'<p class="mini">No additional certificates. Publicly trusted services work without an upload.</p>';
- document.querySelectorAll('[data-remove-cert]').forEach(button=>button.onclick=()=>{const cert=certificates.find(c=>c.fingerprint===button.dataset.removeCert);confirmRemove(`Remove ${cert.name} from server trust? Services relying on it may fail certificate verification.`,async()=>{await api('/api/settings/trust/'+cert.fingerprint,'DELETE');renderTrust(await api('/api/settings/trust'));toast('Certificate removed. Checks will refresh automatically.');});});
-}
-$('trust-form').onsubmit=async event=>{event.preventDefault();const button=event.submitter;button.disabled=true;$('trust-error').textContent='';try{
- const files=[...$('trust-files').files];if(files.length>32)throw new Error('Select up to 32 files at a time.');
- const uploads=[];for(const file of files){if(file.size>350000)throw new Error('Certificate files must be smaller than 350 KB.');const bytes=new Uint8Array(await file.arrayBuffer());let binary='';for(const byte of bytes)binary+=String.fromCharCode(byte);uploads.push({name:$('trust-name').value,certificate:btoa(binary),encoding:'base64'});}
- let added=0;for(const upload of uploads){const result=await api('/api/settings/trust','POST',upload);added+=result.added;renderTrust(result.certificates);}
- $('trust-form').reset();toast(`${added} certificate${added===1?'':'s'} added. Service checks will refresh automatically.`);
- }catch(error){$('trust-error').textContent=error.message;}finally{button.disabled=false;}};
 
 const ICONS={
  grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
