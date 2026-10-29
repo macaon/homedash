@@ -76,12 +76,14 @@ const ICONS={
 function icon(name){return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]||ICONS.grid}</svg>`;}
 function host(url){try{return new URL(url).host;}catch{return url;}}
 async function load(){catalog=await api('/api/catalog');render();if($('groups').open)renderGroups();}
-function cardMarkup(card){const basic=catalog.connections.find(c=>c.id===card.connection_id)?.kind==='http';return `<article class="card service-card" draggable="true" data-card="${card.id}"><div class="card-top"><div class="service-icon">${icon(card.icon)}</div><div class="service-copy"><h3>${esc(card.name)}</h3>${card.description?`<p class="service-description">${esc(card.description)}</p>`:''}</div><details class="service-menu"><summary aria-label="Manage ${esc(card.name)}" title="Manage service">⋯</summary><div class="service-menu-items"><button data-edit="${card.id}">Edit</button><button data-move="${card.id}" data-direction="-1">Move earlier</button><button data-move="${card.id}" data-direction="1">Move later</button><button class="danger" data-delete="${card.id}">Remove</button></div></details></div>${card.connection_id&&!basic?`<div class="live-status" data-status="${card.connection_id}"></div>`:''}<div class="card-bottom"><span class="service-location">${basic?`<span class="availability" data-status="${card.connection_id}" data-compact></span>`:''}<span class="service-host" title="${esc(card.url)}">${esc(host(card.url))}</span></span><a class="open-link" href="${esc(card.url)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${esc(card.name)}">Open ↗</a></div></article>`;}
+let expandedCard=null;
+function cardMarkup(card){return `<article class="card service-card" draggable="true" data-card="${card.id}"><div class="card-top"><div class="service-icon">${icon(card.icon)}</div><div class="service-copy"><h3>${esc(card.name)}</h3>${card.description?`<p class="service-description">${esc(card.description)}</p>`:''}</div><details class="service-menu"><summary aria-label="Manage ${esc(card.name)}" title="Manage service">⋯</summary><div class="service-menu-items"><button data-edit="${card.id}">Edit</button><button data-move="${card.id}" data-direction="-1">Move earlier</button><button data-move="${card.id}" data-direction="1">Move later</button><button class="danger" data-delete="${card.id}">Remove</button></div></details></div><div class="card-bottom"><span class="service-location">${card.connection_id?`<span class="availability" data-status="${card.connection_id}" data-compact></span>`:''}<span class="service-host" title="${esc(card.url)}">${esc(host(card.url))}</span></span><a class="open-link" href="${esc(card.url)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${esc(card.name)}">Open ↗</a></div>${card.connection_id?`<button class="service-expand" data-expand="${card.id}" aria-expanded="${expandedCard===card.id}" aria-controls="service-live-details" aria-label="Live details for ${esc(card.name)}" title="Show or hide live details"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>`:''}</article>`;}
 function render(){
  const query=$('search').value.trim().toLowerCase();
  const visible=catalog.cards.filter(card=>(card.name+' '+card.description+' '+card.url).toLowerCase().includes(query));
  const groups=[...catalog.groups,{id:null,name:catalog.groups.length?'Ungrouped':'Services'}];
  $('dashboard').innerHTML=groups.map(group=>{const cards=visible.filter(c=>c.group_id===group.id);return cards.length?`<section class="service-group"><div class="group-head"><h2>${esc(group.name)}</h2><span class="group-count">${cards.length}</span></div><div class="cards">${cards.map(cardMarkup).join('')}</div></section>`:'';}).join('')||`<div class="card blank"><h3>${query?'No matching services':'A home for your homelab'}</h3><p class="muted">${query?'Try a different name or hostname.':'Add your first service to bring your homelab together. Start with a browser link, then add live status whenever you need it.'}</p>${query?'':'<button class="primary" id="first-card">+ Add your first service</button>'}</div>`;
+ document.querySelectorAll('[data-expand]').forEach(button=>button.onclick=()=>{expandedCard=expandedCard===button.dataset.expand?null:button.dataset.expand;placeDetails();renderStatus();});
  $('first-card')?.addEventListener('click',()=>cardEditor());
  document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>cardEditor(catalog.cards.find(c=>c.id===b.dataset.edit)));
  document.querySelectorAll('[data-delete]').forEach(b=>b.onclick=()=>{const card=catalog.cards.find(c=>c.id===b.dataset.delete);confirmRemove(`Remove ${card.name} from your dashboard?`,async()=>{await api('/api/cards/'+card.id,'DELETE');await load();});});
@@ -94,8 +96,20 @@ function render(){
   el.addEventListener('dragleave',()=>el.classList.remove('drop-target'));
   el.addEventListener('drop',e=>{e.preventDefault();el.classList.remove('drop-target');if(dragged)reorderCards(dragged,el.dataset.card);});
  });
- renderStatus();
+ placeDetails();renderStatus();
 }
+function placeDetails(){
+ $('service-live-details')?.remove();
+ document.querySelectorAll('[data-expand]').forEach(button=>button.setAttribute('aria-expanded',String(button.dataset.expand===expandedCard)));
+ const selected=[...document.querySelectorAll('[data-card]')].find(el=>el.dataset.card===expandedCard);
+ const card=catalog.cards.find(c=>c.id===expandedCard);
+ if(!selected||!card?.connection_id)return;
+ const row=[...selected.parentElement.children].filter(el=>Math.abs(el.getBoundingClientRect().top-selected.getBoundingClientRect().top)<2);
+ row[row.length-1].insertAdjacentHTML('afterend',`<section class="card service-live-details" id="service-live-details" aria-label="Live details for ${esc(card.name)}"><div class="details-heading"><h3>${esc(card.name)} <span>Live details</span></h3><button id="close-live-details" aria-label="Close live details">×</button></div><div data-status="${card.connection_id}"></div></section>`);
+ const panel=$('service-live-details');panel.style.setProperty('--pointer-x',`${selected.getBoundingClientRect().left+selected.getBoundingClientRect().width/2-panel.getBoundingClientRect().left}px`);
+ $('close-live-details').onclick=()=>{const button=selected.querySelector('[data-expand]');expandedCard=null;placeDetails();button?.focus();};
+}
+window.addEventListener('resize',()=>{placeDetails();renderStatus();});
 async function reorderCards(source,target){const a=catalog.cards.find(c=>c.id===source),b=catalog.cards.find(c=>c.id===target);if(!a||!b||a.group_id!==b.group_id||source===target)return;const ids=catalog.cards.map(c=>c.id);ids.splice(ids.indexOf(source),1);ids.splice(ids.indexOf(target),0,source);try{await api('/api/order/cards','PUT',{ids});await load();}catch(e){toast(e.message,true);}}
 async function moveCard(id,direction){const card=catalog.cards.find(c=>c.id===id);const siblings=catalog.cards.filter(c=>c.group_id===card.group_id);const next=siblings[siblings.findIndex(c=>c.id===id)+direction];if(!next)return;const ids=catalog.cards.map(c=>c.id);const a=ids.indexOf(id),b=ids.indexOf(next.id);[ids[a],ids[b]]=[ids[b],ids[a]];try{await api('/api/order/cards','PUT',{ids});await load();}catch(e){toast(e.message,true);}}
 $('search').oninput=render;
