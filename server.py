@@ -461,10 +461,13 @@ class GroupIn(BaseModel):
             raise ValueError('Name is required')
         return value.strip()
 
+LUCIDE_ICONS={item['name'] for item in json.loads((ROOT/'static/lucide/catalog.json').read_text())['icons']}
+LEGACY_ICONS={'grid','server','home','network','storage','container','terminal','book','media','globe'}
+
 class CardIn(GroupIn):
     url: str = Field(max_length=2048)
     description: str = Field(default='', max_length=1000)
-    icon: str = Field(default='grid', max_length=30)
+    icon: str = Field(default='grid', max_length=100)
     group_id: str | None = None
     connection_id: str | None = None
     @field_validator('url')
@@ -477,7 +480,7 @@ class CardIn(GroupIn):
     @field_validator('icon')
     @classmethod
     def icon_valid(cls, value):
-        if value not in ('grid','server','home','network','storage','container','terminal','book','media','globe'):
+        if value not in LUCIDE_ICONS and value not in LEGACY_ICONS:
             raise ValueError('Choose a supported icon')
         return value
 

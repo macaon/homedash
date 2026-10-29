@@ -37,6 +37,20 @@ class DashboardTests(unittest.TestCase):
     def connection(self,**extra):
         r=self.client.post('/api/connections',json={'name':'Availability','kind':'http','base_url':'https://service.example.net',**extra});self.assertEqual(r.status_code,200,r.text);return r.json()['id']
 
+    def test_lucide_icons_and_legacy(self):
+        for name in ('server-cog','database-backup','layout-grid','grid','storage'):
+            self.card(icon=name)
+        for name in ('not-a-real-icon','../server','server#x','<svg>'):
+            response=self.client.post('/api/cards',json={'name':'Bad icon','url':'https://example.net','icon':name})
+            self.assertEqual(response.status_code,422)
+
+    def test_complete_lucide_sprite(self):
+        import xml.etree.ElementTree as ET
+        root=ET.fromstring((server.ROOT/'static/lucide/sprite.svg').read_text())
+        symbols={el.attrib['id'] for el in root.iter() if el.tag.endswith('}symbol')}
+        self.assertGreater(len(server.LUCIDE_ICONS),1900)
+        self.assertTrue(server.LUCIDE_ICONS <= symbols)
+
     def test_ping_connection_validation(self):
         ident=self.connection(kind='ping',base_url='2001:db8::1')
         self.assertTrue(ident)

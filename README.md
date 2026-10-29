@@ -169,3 +169,9 @@ In Add/Edit service, choose **Ping** as the service type and enter a hostname or
 The image includes `iputils-ping` and uses unprivileged ICMP sockets. The container network namespace must permit its group in `net.ipv4.ping_group_range` (the usual container default is `0 2147483647`). No raw-socket capability or privileged container is required.
 
 Service cards keep their status dot visible and hide metrics by default. Use the chevron between the status dot and Open button on a checked card to open a full-width panel below its row, pushing later rows down. One panel is open at a time. The panel shows live details, including latency, packet loss, API metrics, errors and last check time. Expanded details continue updating with normal polling; link-only cards have no expander.
+
+### Lucide icons
+
+The service editor includes the complete bundled Lucide Static 1.64.0 catalog. Search icon names and keywords, browse results, and choose an icon by its preview and name. Selection stays visible while searching; Show more icons browses the rest of the results. Existing service icons remain supported. Assets are served locally with no CDN requests.
+
+`static/lucide/LICENSE` includes Lucide's license notices. To reproduce the pinned assets, run `python scripts/vendor_lucide.py` (requires network access to the npm registry). The importer verifies the package SHA-512 integrity and updates the SVG sprite and searchable catalog together.
