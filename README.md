@@ -172,6 +172,6 @@ Service cards keep their status dot visible and hide metrics by default. Use the
 
 ### Lucide icons
 
-The service editor includes the complete bundled Lucide Static 1.64.0 catalog. Search icon names and keywords, browse results, and choose an icon by its preview and name. Selection stays visible while searching; Show more icons browses the rest of the results. Existing service icons remain supported. Assets are served locally with no CDN requests.
+The service editor includes the complete bundled Lucide Static 1.64.0 catalog. The ten common icons appear first as large, unlabeled buttons, with names on hover. Expand the chevron to search names and keywords and browse the full icon-only catalog. A selected icon outside the common set is added to the visible shortcuts. Selection stays visible while searching; Show more icons browses the rest of the results. Existing service icons remain supported. Assets are served locally with no CDN requests.
 
 `static/lucide/LICENSE` includes Lucide's license notices. To reproduce the pinned assets, run `python scripts/vendor_lucide.py` (requires network access to the npm registry). The importer verifies the package SHA-512 integrity and updates the SVG sprite and searchable catalog together.
