@@ -175,3 +175,13 @@ Service cards keep their status dot visible and hide metrics by default. Use the
 The service editor includes the complete bundled Lucide Static 1.64.0 catalog. The ten common icons appear first as large, unlabeled buttons, with names on hover. Expand the chevron to search names and keywords and browse the full icon-only catalog. A selected icon outside the common set is added to the visible shortcuts. Selection stays visible while searching; Show more icons browses the rest of the results. Existing service icons remain supported. Assets are served locally with no CDN requests.
 
 `static/lucide/LICENSE` includes Lucide's license notices. To reproduce the pinned assets, run `python scripts/vendor_lucide.py` (requires network access to the npm registry). The importer verifies the package SHA-512 integrity and updates the SVG sprite and searchable catalog together.
+
+### Reusing checks and moving cards
+
+Choose **Check type**, then **Check**. New services default to **New check**; saved checks of the selected type are listed by name and target host. Choosing a saved check shares its polling/results and shows its settings read-only. Choose New check for an independent configuration. Editing a service selects its current check automatically. **None** creates a link without monitoring.
+
+Drag cards to reorder, or use **Move…** in a card's menu and select a position within its group using the keyboard.
+
+### Publishing images
+
+Run `./build-push.sh` from this repository to publish `docker.home.arpa/homedash:latest`. Before replacing a different current image, the script preserves it under a UTC `YYYYMMDD-HHMMSS` tag derived from that image's own build metadata. New builds are published only as `latest`; timestamp tags are rollback images. Deployments normally use `:latest`, or an archived timestamp for rollback.
