@@ -37,6 +37,15 @@ class DashboardTests(unittest.TestCase):
     def connection(self,**extra):
         r=self.client.post('/api/connections',json={'name':'Availability','kind':'http','base_url':'https://service.example.net',**extra});self.assertEqual(r.status_code,200,r.text);return r.json()['id']
 
+    def test_ping_connection_validation(self):
+        ident=self.connection(kind='ping',base_url='2001:db8::1')
+        self.assertTrue(ident)
+        for target in ('https://example.net','-c5','host;id'):
+            response=self.client.post('/api/connections',json={'name':'Ping','kind':'ping','base_url':target})
+            self.assertEqual(response.status_code,422)
+        response=self.client.post('/api/connections',json={'name':'Web','kind':'http','base_url':'example.net'})
+        self.assertEqual(response.status_code,422)
+
     def test_setup_login_and_boundaries(self):
         other=TestClient(server.app)
         self.assertEqual(other.get('/api/catalog').status_code,401)

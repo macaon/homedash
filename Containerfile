@@ -1,6 +1,7 @@
 FROM docker.io/library/python:3.14-slim
 WORKDIR /srv
 COPY requirements.txt ./
+RUN apt-get update && apt-get install -y --no-install-recommends iputils-ping && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir -r requirements.txt && useradd -r -u 10001 homedash && mkdir /data && chown homedash /data
 COPY server.py ./
 COPY connectors ./connectors

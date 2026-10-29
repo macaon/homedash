@@ -161,3 +161,9 @@ Settings cog → **User Interface** sets the server default to Auto, Light or Da
 Additional outbound CA certificates are managed under **Server settings → Trust**. The same store supplies both service checks and OIDC; the OAuth / OIDC tab links there rather than duplicating certificate fields. Public system roots remain trusted.
 
 Trust uses the unchanged shared HomeTemplate `home-trust.js` and `home-trust.css` component. Uploads, certificate rows, messages and removal confirmation have one layout across Home* apps. OIDC provider roots belong in Trust. App-specific scope details are under “Where this trust store applies.”
+
+### Ping checks
+
+In Add/Edit service, choose **Ping** as the service type and enter a hostname or IPv4/IPv6 address (without a URL or port). HomeDash sends three ICMP echo requests per check and shows average latency in milliseconds and packet loss. The service URL remains the link opened by the card. Checks run from the HomeDash server, not your browser. Partial loss shows Needs attention; no replies shows Offline. A host can block ICMP while its web service remains available.
+
+The image includes `iputils-ping` and uses unprivileged ICMP sockets. The container network namespace must permit its group in `net.ipv4.ping_group_range` (the usual container default is `0 2147483647`). No raw-socket capability or privileged container is required.

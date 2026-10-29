@@ -2,6 +2,8 @@
 from dataclasses import dataclass, field
 from typing import Protocol
 import re
+import asyncio
+import ipaddress
 import ssl
 from urllib.parse import urlsplit
 import httpx
@@ -49,6 +51,50 @@ class HTTP:
         code = await fetch(client, base, as_json=False)
         return Result('healthy', f'HTTP {code}', [{'label':'Response','value':str(code)}])
 
+def validate_ping_target(value):
+    value=value.strip()
+    try:
+        return str(ipaddress.ip_address(value))
+    except ValueError:
+        pass
+    if len(value)>253 or not re.fullmatch(r'[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.?', value):
+        raise ValueError('Enter a hostname or IPv4/IPv6 address, without a URL or port')
+    if any(not re.fullmatch(r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?', part) for part in value.rstrip('.').split('.')):
+        raise ValueError('Enter a valid hostname or IP address')
+    return value
+
+class Ping:
+    id = 'ping'
+    name = 'Ping'
+    description = 'Send three ICMP echo requests from the HomeDash server. Shows average round-trip latency and packet loss. Hosts that block ICMP may appear offline.'
+    secret_label = ''
+    fields = []
+    def validate(self, config):
+        return {}
+    async def poll(self, client, base, config, secret):
+        target=validate_ping_target(base)
+        process=await asyncio.create_subprocess_exec(
+            'ping', '-n', '-c', '3', '-i', '0.2', '-W', '2', '-w', '7', '--', target,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+            env={'PATH':'/usr/bin:/bin','LC_ALL':'C'})
+        try:
+            output,_=await asyncio.wait_for(process.communicate(),timeout=9)
+        finally:
+            if process.returncode is None:
+                process.kill()
+                await process.wait()
+        text=output.decode(errors='replace')
+        loss=re.search(r'(\d+(?:\.\d+)?)% packet loss',text)
+        timing=re.search(r'= ([\d.]+)/([\d.]+)/([\d.]+)/([\d.]+) ms',text)
+        if process.returncode not in (0,1) or not loss:
+            return Result('unavailable','Ping failed. Check the hostname, DNS and ICMP permissions.')
+        percent=float(loss[1])
+        metrics=[{'label':'Packet loss','value':f'{percent:g}','unit':'%'}]
+        if timing:
+            metrics.insert(0,{'label':'Latency','value':f'{float(timing[2]):.2f}','unit':'ms'})
+        status='unavailable' if percent==100 else 'degraded' if percent else 'healthy'
+        return Result(status,'No ping replies (ICMP may be blocked)' if percent==100 else f'{percent:g}% packet loss',metrics)
+
 class HomeAssistant:
     id = 'homeassistant'
     name = 'Home Assistant'
@@ -89,7 +135,7 @@ class Proxmox:
             {'label':'Guests running','value':f'{running} / {len(guests)}'},
             {'label':'Memory used','value':str(round(sum(v.get('mem',0) for v in nodes)/1024**3,1)), 'unit':'GiB'}])
 
-REGISTRY = {plugin.id:plugin for plugin in (HTTP(), HomeAssistant(), Proxmox())}
+REGISTRY = {plugin.id:plugin for plugin in (HTTP(), Ping(), HomeAssistant(), Proxmox())}
 
 def manifest():
     return [{'id':p.id,'name':p.name,'description':p.description,'secret_label':p.secret_label,'fields':p.fields} for p in list(REGISTRY.values())]
