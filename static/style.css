@@ -198,3 +198,6 @@ header { position: relative; }
   header nav#nav.open { display: flex; }
   header nav#nav a { padding: 8px 10px; }
 }
+
+/* HomeUI 0.1.1: keep every settings option visible. */
+.tabs{flex-wrap:wrap;overflow:visible}.hui-access-section+.hui-access-section{margin-top:24px;padding-top:24px;border-top:1px solid var(--line)}.hui-access-heading{font-size:17px;text-transform:none;letter-spacing:-.02em;color:var(--text);margin:0 0 12px}
