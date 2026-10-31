@@ -108,6 +108,12 @@ Choose **BookStack** under Integration and enter the HTTPS base URL, Token ID an
 
 Details show **Books**, **Chapters**, and **Pages** totals plus the three **Recently updated pages**, with page title, book name and last update date. All results follow the token account’s content permissions. Counts use the API’s total fields rather than the number of returned rows. The connector reads list metadata and resolves book names as needed; it does not fetch page bodies, audit logs or edit content. Empty page lists and failed/stale refreshes use the normal explicit states.
 
+### Immich
+
+Choose **Immich** under Integration and enter its HTTPS base URL and an API key. The connector reads `/api/server/statistics`, `/api/server/storage` and `/api/jobs` with the `x-api-key` header, so the key needs only the **server.statistics**, **server.storage** and **job.read** permissions. A missing permission is shown as unavailable rather than as zero.
+
+Details show **Photos**, **Videos**, **Library size** (all users), **Disk used** (percentage of the volume Immich stores media on), **Jobs pending** (active plus waiting, across all queues) and **Failed jobs**. A successful API response makes the service Online. Failed jobs, or a disk at least 90% full, show Needs attention; a queue backlog alone does not. No library contents, albums, people or thumbnails are read, and nothing in Immich is changed.
+
 ### Private certificate authorities
 
 Administrators manage shared certificate trust under **settings cog → Trust**. Name an upload and select one or several public PEM/DER certificate files; PEM bundles are supported too. Upload a private CA root once and all service checks and OIDC logins can trust certificates signed by it. Duplicate certificates are ignored. The list shows each certificate's subject, expiry and SHA-256 fingerprint, with a removal action.
