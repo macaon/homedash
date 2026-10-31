@@ -102,6 +102,12 @@ Choose **Bambuddy** under Integration and supply its HTTPS base URL and an API k
 
 Disconnected printers and reported printer errors show Needs attention. Disconnected devices do not present retained sensor values as current. Missing sensors use an explicit unavailable value; printers without AMS show Not fitted, and multiple AMS readings are labelled individually. API failures retain the previous sections with the standard stale label. Credentials and printer access codes are never returned to the browser.
 
+### BookStack
+
+Choose **BookStack** under Integration and enter the HTTPS base URL, Token ID and Token secret from the BookStack user profile. The secret uses HomeDash’s existing encrypted credential storage; blank retains it. Requests use BookStack’s `Authorization: Token ID:secret` header.
+
+Details show **Books**, **Chapters**, and **Pages** totals plus the three **Recently updated pages**, with page title, book name and last update date. All results follow the token account’s content permissions. Counts use the API’s total fields rather than the number of returned rows. The connector reads list metadata and resolves book names as needed; it does not fetch page bodies, audit logs or edit content. Empty page lists and failed/stale refreshes use the normal explicit states.
+
 ### Private certificate authorities
 
 Administrators manage shared certificate trust under **settings cog → Trust**. Name an upload and select one or several public PEM/DER certificate files; PEM bundles are supported too. Upload a private CA root once and all service checks and OIDC logins can trust certificates signed by it. Duplicate certificates are ignored. The list shows each certificate's subject, expiry and SHA-256 fingerprint, with a removal action.
