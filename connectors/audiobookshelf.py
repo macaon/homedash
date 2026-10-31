@@ -83,10 +83,8 @@ class Audiobookshelf:
             {'label': 'Library items', 'value': f'{sum(int(number(s["totalItems"])) for s in stats):,}'},
             {'label': 'Libraries', 'value': str(len(libraries))},
         ]
-        details = {'heading': 'Listening activity', 'items': rows,
+        details = {'heading': 'Recent activity', 'items': rows,
                    'empty': 'No open or recently synced sessions.'}
-        if rows:
-            details['note'] = 'Includes open sessions and sessions synced in the last 3 minutes. Activity may continue to appear briefly after pausing or stopping.'
         if len(sessions) > 100:
-            details['note'] += ' Showing the first 100 open sessions.'
+            details['note'] = 'Showing the first 100 open sessions.'
         return Result('healthy', 'Audiobookshelf API available', metrics, details)

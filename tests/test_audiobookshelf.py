@@ -40,7 +40,7 @@ class AudiobookshelfTests(unittest.TestCase):
         result = self.poll()
         self.assertEqual(result.metrics[0]['value'], '0')
         self.assertEqual(result.metrics[1]['value'], '1,395')
-        self.assertEqual(result.details['heading'], 'Listening activity')
+        self.assertEqual(result.details['heading'], 'Recent activity')
         self.assertEqual(result.details['items'], [])
         self.assertEqual(result.details['empty'], 'No open or recently synced sessions.')
         self.assertFalse(any('/api/me/' in r.url.path for r in self.calls))
