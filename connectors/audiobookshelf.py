@@ -1,6 +1,7 @@
 """Read-only library totals and reported sessions; online does not mean playing."""
 import asyncio
 import math
+import time
 from urllib.parse import quote
 
 
@@ -29,7 +30,7 @@ def activity(session, username=''):
 class Audiobookshelf:
     id = 'audiobookshelf'
     name = 'Audiobookshelf'
-    description = 'Library totals, open playback sessions and your most recent listening activity. Open sessions may be paused; offline listening appears after syncing.'
+    description = 'Library totals, open sessions and recently synced listening activity across users. Session activity does not prove playback is still running.'
     secret_label = 'API key'
     fields = []
 
@@ -43,7 +44,9 @@ class Audiobookshelf:
         async def get(path):
             return await fetch(client, base + path, headers)
 
-        libraries, online = await asyncio.gather(get('/api/libraries'), get('/api/users/online'))
+        libraries, online, recent = await asyncio.gather(
+            get('/api/libraries'), get('/api/users/online'),
+            get('/api/sessions?itemsPerPage=100&desc=1'))
         libraries = libraries['libraries']
         # Bound fan-out and total work within the scheduler's existing timeout.
         if len(libraries) > 32:
@@ -54,22 +57,36 @@ class Audiobookshelf:
                 get('/api/libraries/' + quote(str(lib['id']), safe='') + '/stats')
                 for lib in libraries[offset:offset + 4])))
         sessions = online['openSessions']
+        users = {u['id']: u.get('username', '') for u in online.get('usersOnline', [])}
+        rows = []
+        seen_users = set()
+        for session in sessions[:100]:
+            row = activity(session, users.get(session.get('userId'), ''))
+            row['state'] = 'Open session'
+            rows.append(row)
+            if session.get('userId'):
+                seen_users.add(session['userId'])
+        # Some clients sync sessions without opening a server-side playback session.
+        # A short recency window is an activity signal, not a playing/paused flag.
+        now = time.time()
+        for session in sorted(recent['sessions'], key=lambda s: number(s.get('updatedAt') or 0), reverse=True):
+            updated = number(session.get('updatedAt') or 0) / 1000
+            user_id = session.get('userId')
+            if not 0 <= now - updated <= 180 or not user_id or user_id in seen_users:
+                continue
+            row = activity(session, users.get(user_id, ''))
+            row['state'] = 'Recently synced'
+            rows.append(row)
+            seen_users.add(user_id)
         metrics = [
-            {'label': 'Open sessions', 'value': str(len(sessions))},
+            {'label': 'Sessions', 'value': str(len(rows))},
             {'label': 'Library items', 'value': f'{sum(int(number(s["totalItems"])) for s in stats):,}'},
             {'label': 'Libraries', 'value': str(len(libraries))},
         ]
-        if sessions:
-            # All rows are retained, with excess rows disclosed by the frontend.
-            users = {u['id']: u.get('username', '') for u in online.get('usersOnline', [])}
-            rows = [activity(s, users.get(s.get('userId'), '')) for s in sessions[:100]]
-            details = {'heading': 'Open sessions', 'items': rows,
-                       'note': 'Open sessions may be paused. Offline listening appears after syncing.'}
-            if len(sessions) > 100:
-                details['note'] += ' Showing the first 100 sessions.'
-        else:
-            recent = await get('/api/me/listening-sessions?itemsPerPage=1&page=0')
-            rows = [activity(s) for s in recent['sessions'][:1]]
-            details = {'heading': 'Last listened', 'items': rows,
-                       'empty': 'No listening history for this API key’s account.'}
+        details = {'heading': 'Listening activity', 'items': rows,
+                   'empty': 'No open or recently synced sessions.'}
+        if rows:
+            details['note'] = 'Includes open sessions and sessions synced in the last 3 minutes. Activity may continue to appear briefly after pausing or stopping.'
+        if len(sessions) > 100:
+            details['note'] += ' Showing the first 100 open sessions.'
         return Result('healthy', 'Audiobookshelf API available', metrics, details)
