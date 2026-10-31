@@ -114,6 +114,12 @@ Choose **Immich** under Integration and enter its HTTPS base URL and an API key.
 
 Details show **Photos**, **Videos**, **Library size** (all users) and **Disk used** (percentage of the volume Immich stores media on), with a **Background jobs** section below holding **Jobs pending** (active plus waiting, across all queues) and **Failed jobs**. A successful API response makes the service Online. Failed jobs, or a disk at least 90% full, show Needs attention; a queue backlog alone does not. No library contents, albums, people or thumbnails are read, and nothing in Immich is changed.
 
+### HomePod
+
+Choose **HomePod** under Integration, enter its HTTPS base URL and an API token. In HomePod, create the token under **Server settings → Access → API tokens** with the **Read** level; nothing more is needed or used. The connector reads `/api/hosts` and each host's `/containers` with bearer authentication.
+
+Details show **Hosts online**, **Containers running** and **Not running**, followed by **Needs attention**: containers reporting unhealthy, restarting or dead, and hosts that are offline or unreachable. Stopped containers are counted but not flagged, because many are one-shot jobs. Any item under Needs attention makes the card show Needs attention. A rejected or expired token is shown as unavailable rather than as an empty fleet. Nothing is started, stopped or changed.
+
 ### Private certificate authorities
 
 Administrators manage shared certificate trust under **settings cog → Trust**. Name an upload and select one or several public PEM/DER certificate files; PEM bundles are supported too. Upload a private CA root once and all service checks and OIDC logins can trust certificates signed by it. Duplicate certificates are ignored. The list shows each certificate's subject, expiry and SHA-256 fingerprint, with a removal action.
