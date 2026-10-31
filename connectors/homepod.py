@@ -1,27 +1,17 @@
-"""Read-only host and container health from HomePod's API (a Read-level token is enough)."""
+"""Read-only host and container health from HomePod's API (a Read-level token is enough).
+
+What needs attention, and what has been ignored, is HomePod's own decision (/api/attention); this only displays it.
+"""
 import asyncio
 import re
 
 import httpx
 
 
-def container_problem(container):
-    """Only conditions that are never intentional: stopped containers are often one-shot jobs."""
-    state = str(container.get('State') or '').lower()
-    status = str(container.get('Status') or '').lower()
-    if '(unhealthy)' in status:
-        return 'Unhealthy'
-    if state == 'restarting':
-        return 'Restarting'
-    if state == 'dead':
-        return 'Dead'
-    return ''
-
-
 class HomePod:
     id = 'homepod'
     name = 'HomePod'
-    description = 'Docker hosts online, containers running and any unhealthy or restarting containers across all HomePod hosts. Needs a Read API token.'
+    description = 'Docker hosts online, containers running and what needs attention across all HomePod hosts, as HomePod reports it. Needs a Read API token.'
     secret_label = 'API token'
     fields = []
 
@@ -56,27 +46,29 @@ class HomePod:
         for offset in range(0, len(hosts), 4):
             results.extend(await asyncio.gather(*(containers(h) for h in hosts[offset:offset + 4])))
         online = running = other = 0
-        problems = []
-        for host, found in zip(hosts, results):
-            name = str(host.get('name') or 'Host')[:100]
-            if found is None:
-                problems.append({'title': name, 'subtitle': 'Docker host', 'state': 'Host offline'})
-                continue
-            online += 1
-            for container in found:
-                if str(container.get('State') or '').lower() == 'running':
-                    running += 1
-                else:
-                    other += 1
-                problem = container_problem(container)
-                if problem:
-                    problems.append({'title': str(container.get('Names') or 'Container')[:250], 'subtitle': name, 'state': problem})
+        for found in results:
+            if found is not None:
+                online += 1
+                for container in found:
+                    if str(container.get('State') or '').lower() == 'running':
+                        running += 1
+                    else:
+                        other += 1
+        report = await fetch(client, base + '/api/attention', headers)
+        if not isinstance(report, dict) or not isinstance(report.get('active'), list) or not isinstance(report.get('ignored'), list):
+            raise ValueError('Expected an attention report')
+        items = [{'title': str(i['title'])[:250], 'subtitle': str(i.get('host') or '')[:100],
+                  'state': (str(i['detail']).split(' · ')[0] if i.get('ignorable') else str(i['detail']))[:250]}
+                 for i in report['active'] if i.get('level') != 'info']
+        notices = [{'title': str(i['title'])[:250], 'subtitle': str(i['detail'])[:250], 'state': 'Notice'}
+                   for i in report['active'] if i.get('level') == 'info']
         metrics = [
             {'label': 'Hosts online', 'value': f'{online} of {len(hosts)}'},
             {'label': 'Containers running', 'value': f'{running:,} of {running + other:,}'},
             {'label': 'Not running', 'value': f'{other:,}'},
         ]
-        return Result('degraded' if problems else 'healthy',
-                      f'{len(problems)} item(s) need attention' if problems else 'HomePod API available', metrics,
-                      {'heading': 'Needs attention', 'items': problems[:100], 'empty': 'Every online container is running normally.',
-                       'more_label': 'More items'})
+        details = {'heading': 'Needs attention', 'items': (items + notices)[:100], 'empty': 'Nothing needs attention.', 'more_label': 'More items'}
+        if report['ignored']:
+            details['note'] = f'{len(report["ignored"])} alert(s) ignored in HomePod.'
+        return Result('degraded' if items else 'healthy',
+                      f'{len(items)} item(s) need attention' if items else 'HomePod API available', metrics, details)

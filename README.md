@@ -118,7 +118,7 @@ Details show **Photos**, **Videos**, **Library size** (all users) and **Disk use
 
 Choose **HomePod** under Integration, enter its HTTPS base URL and an API token. In HomePod, create the token under **Server settings → Access → API tokens** with the **Read** level; nothing more is needed or used. The connector reads `/api/hosts` and each host's `/containers` with bearer authentication.
 
-Details show **Hosts online**, **Containers running** and **Not running**, followed by **Needs attention**: containers reporting unhealthy, restarting or dead, and hosts that are offline or unreachable. Stopped containers are counted but not flagged, because many are one-shot jobs. Any item under Needs attention makes the card show Needs attention. A rejected or expired token is shown as unavailable rather than as an empty fleet. Nothing is started, stopped or changed.
+Details show **Hosts online**, **Containers running** and **Not running**, followed by **Needs attention**, which is exactly what HomePod itself reports at `/api/attention`: unhealthy, restarting or dead containers, offline or unreachable hosts, agent certificates that are not renewing, and update-check problems. Pending image updates are listed as notices and do not change the card's status. Stopped containers are counted but not flagged, because many are one-shot jobs. Alerts ignored in HomePod do not appear; a note says how many are ignored. Any other item makes the card show Needs attention. A rejected or expired token is shown as unavailable rather than as an empty fleet. Nothing is started, stopped or changed.
 
 ### Private certificate authorities
 
