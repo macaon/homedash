@@ -15,6 +15,7 @@ class Result:
     status: str
     summary: str
     metrics: list[dict] = field(default_factory=list)
+    details: dict = field(default_factory=dict)
 
 class Connector(Protocol):
     id: str
@@ -135,7 +136,9 @@ class Proxmox:
             {'label':'Guests running','value':f'{running} / {len(guests)}'},
             {'label':'Memory used','value':str(round(sum(v.get('mem',0) for v in nodes)/1024**3,1)), 'unit':'GiB'}])
 
-REGISTRY = {plugin.id:plugin for plugin in (HTTP(), Ping(), HomeAssistant(), Proxmox())}
+from .audiobookshelf import Audiobookshelf
+
+REGISTRY = {plugin.id:plugin for plugin in (HTTP(), Ping(), HomeAssistant(), Proxmox(), Audiobookshelf())}
 
 def manifest():
     return [{'id':p.id,'name':p.name,'description':p.description,'secret_label':p.secret_label,'fields':p.fields} for p in list(REGISTRY.values())]

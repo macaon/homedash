@@ -34,7 +34,7 @@ The example Compose binds loopback by default. Set `HOMEDASH_BIND` to a private 
 
 1. Open **Groups** to create sections such as Infrastructure, Home, or Media.
 2. Choose **Add service**. A preset can fill its name, description and icon; enter your own URL.
-3. Select a group and icon. Under **Service type**, choose Link only, Website availability, Home Assistant, Proxmox VE, or another installed service definition. Configure its check directly in the same form.
+3. Select a group and icon. Under **Integration**, choose Link only, Website availability, Home Assistant, Proxmox VE, or another installed service definition. Configure its check directly in the same form.
 4. **Open** launches the service in a new browser tab. The card's **⋯** menu contains Edit, ordering actions and Remove.
 5. Drag cards within their group to reorder. Change a card's group through Edit. Groups have their own up/down ordering controls.
 
@@ -80,6 +80,16 @@ Grant read-only audit access at the scope you want to display; privilege-separat
 
 Reference: [Proxmox VE API](https://pve.proxmox.com/wiki/Proxmox_VE_API).
 
+### Audiobookshelf
+
+Choose **Audiobookshelf** in the service editor and enter its HTTPS base URL and API key. The connector reads library totals, open sessions and the key account’s most recent listening session. The key must have permission to read `/api/users/online` and the selected account’s libraries/history; a permission failure is shown as unavailable rather than zero listeners.
+
+Expanded details show Open sessions, Library items and Libraries, followed by up to three session rows with title, author, user (when reported), progress and remaining audio duration. **More sessions** reveals additional rows in document flow. Open sessions can be paused, so the count is not labelled “Listening now.” Offline listening appears after the client syncs. When no sessions are open, the panel shows the key account’s last listen, or an explicit empty history message.
+
+Detail panels grow with their contents and push subsequent rows down, with no fixed height or internal scrollbar. Lists retain their disclosure state across refreshes and viewport changes. Failed checks retain both metrics and activity with a stale label and last successful data time. Remaining time is audio duration, without adjustment for playback speed.
+
+Checks use the existing encrypted connection secrets and server polling; the browser never calls Audiobookshelf directly. No playback controls or changes to the Audiobookshelf server are made.
+
 ### Private certificate authorities
 
 Administrators manage shared certificate trust under **settings cog → Trust**. Name an upload and select one or several public PEM/DER certificate files; PEM bundles are supported too. Upload a private CA root once and all service checks and OIDC logins can trust certificates signed by it. Duplicate certificates are ignored. The list shows each certificate's subject, expiry and SHA-256 fingerprint, with a removal action.
@@ -110,7 +120,9 @@ Each connector supplies:
 
 - `id`, `name`, `description`, `secret_label` and configuration `fields` for the UI.
 - `validate(config)` returning normalized configuration or raising `ValueError`.
-- Async `poll(client, base_url, config, secret)` returning a `Result(status, summary, metrics)`.
+- Async `poll(client, base_url, config, secret)` returning a `Result(status, summary, metrics, details)`; `details` is optional.
+
+Optional `details` adds an activity section with `heading`, `items`, and optional `empty`/`note` text. Rows support `title`, `subtitle`, `user`, `date`, optional numeric `progress` (0–100), and `remaining_minutes`. These are structured data, never HTML. The core escapes text and retains this section alongside stale metrics.
 
 Statuses are `healthy` or `degraded`; the scheduler produces `pending` and `unavailable`. Each metric has `label`, `value` and optional `unit`. Register an instance in `REGISTRY`; the UI discovers it from `/api/plugins` automatically. Use the supplied HTTP client and bounded `fetch` helper. Do not log secrets, return raw errors, make state-changing requests, or bypass TLS. Add connector fixture tests and rebuild the image.
 
@@ -178,10 +190,12 @@ The service editor includes the complete bundled Lucide Static 1.64.0 catalog. T
 
 ### Reusing checks and moving cards
 
-Choose **Check type**, then **Check**. New services default to **New check**; saved checks of the selected type are listed by name and target host. Choosing a saved check shares its polling/results and shows its settings read-only. Choose New check for an independent configuration. Editing a service selects its current check automatically. **None** creates a link without monitoring.
+Choose **Integration**, then **Connection**. New services default to **New connection**; saved checks of the selected type are listed by name and target host. Choosing a saved check shares its polling/results and shows its settings read-only. Choose New connection for an independent configuration. Editing a service selects its current check automatically. **None** creates a link without monitoring.
 
 Drag cards to reorder, or use **Move…** in a card's menu and select a position within its group using the keyboard.
 
 ### Publishing images
 
 Run `./build-push.sh` from this repository to publish `docker.home.arpa/homedash:latest`. Before replacing a different current image, the script preserves it under a UTC `YYYYMMDD-HHMMSS` tag derived from that image's own build metadata. New builds are published only as `latest`; timestamp tags are rollback images. Deployments normally use `:latest`, or an archived timestamp for rollback.
+
+The Integration selector identifies a provider using its stable connector ID, independently of the card name or URL. Each integration supplies both availability and any live details: a successful authenticated API fetch is Online even when no playback sessions are open. A failed fetch changes the status and labels retained data stale. Website availability and Ping provide status for services without a dedicated integration.

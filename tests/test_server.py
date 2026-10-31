@@ -154,6 +154,23 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(value['status'],'unavailable');self.assertTrue(value['stale']);self.assertEqual(value['metrics'][0]['value'],'200')
         self.assertNotIn('contains-secret',json.dumps(value))
 
+    def test_activity_details_survive_failed_refresh(self):
+        from connectors import Result
+        from unittest.mock import AsyncMock
+        cid=self.connection(kind='audiobookshelf',secret='fixture-secret')
+        self.card(connection_id=cid)
+        with server.db() as c: row=dict(c.execute('SELECT * FROM connections WHERE id=?',(cid,)).fetchone())
+        details={'heading':'Open sessions','items':[{'title':'A book','progress':25}]}
+        with patch.object(REGISTRY['audiobookshelf'],'poll',AsyncMock(return_value=Result('healthy','Available',[],details))):
+            asyncio.run(server.poll_connection(row,force=True))
+        self.assertEqual(self.client.get('/api/status').json()[cid]['details'],details)
+        with patch.object(REGISTRY['audiobookshelf'],'poll',AsyncMock(side_effect=ValueError('fixture-secret'))):
+            asyncio.run(server.poll_connection(row,force=True))
+        value=self.client.get('/api/status').json()[cid]
+        self.assertTrue(value['stale'])
+        self.assertEqual(value['details'],details)
+        self.assertNotIn('fixture-secret',json.dumps(value))
+
     def test_oidc_persistence_normalization_and_secret_mask(self):
         payload={'enabled':True,'issuer':'https://id.example.net/realms/home/.well-known/openid-configuration','client_id':'homedash','client_secret':'sso-secret'}
         r=self.client.put('/api/settings/oidc',json=payload)

@@ -746,7 +746,7 @@ async def poll_connection(row,force=False):
                 async with asyncio.timeout(20):
                     async with connector_client('\n'.join(filter(None,(trusted_pem(),row['ca_pem'])))) as http:
                         result=await REGISTRY[row['kind']].poll(http,row['base_url'],json.loads(row['config']),secret)
-                payload={'status':result.status,'summary':result.summary,'metrics':result.metrics,'checked_at':now,'last_success':now}
+                payload={'status':result.status,'summary':result.summary,'metrics':result.metrics,'details':result.details,'checked_at':now,'last_success':now}
             except Exception as error:
                 tls_error=False
                 cause=error
@@ -758,7 +758,7 @@ async def poll_connection(row,force=False):
                     cause=cause.__cause__ or cause.__context__
                 # Do not return exception strings: URLs, provider responses and tokens may be sensitive.
                 payload={'status':'unavailable','summary':('Certificate verification failed. Ask an administrator to upload the service CA certificate under Server settings → Trust.' if tls_error else ('Ping failed. Check the hostname, DNS and ICMP permissions.' if row['kind']=='ping' else 'Connection failed. Check the URL, token and API permissions.')),'error_code':'tls_untrusted' if tls_error else 'connection_failed',
-                         'metrics':previous.get('metrics',[]),'checked_at':now,'last_success':previous.get('last_success')}
+                         'metrics':previous.get('metrics',[]),'details':previous.get('details',{}),'checked_at':now,'last_success':previous.get('last_success')}
         with db() as c:
             latest=c.execute('SELECT revision FROM connections WHERE id=?',(ident,)).fetchone()
             if latest and latest[0]==row['revision']:
