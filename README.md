@@ -112,7 +112,7 @@ Details show **Books**, **Chapters**, and **Pages** totals plus the three **Rece
 
 Choose **Immich** under Integration and enter its HTTPS base URL and an API key. The connector reads `/api/server/statistics`, `/api/server/storage` and `/api/jobs` with the `x-api-key` header, so the key needs only the **server.statistics**, **server.storage** and **job.read** permissions. A missing permission is shown as unavailable rather than as zero.
 
-Details show **Photos**, **Videos**, **Library size** (all users), **Disk used** (percentage of the volume Immich stores media on), **Jobs pending** (active plus waiting, across all queues) and **Failed jobs**. A successful API response makes the service Online. Failed jobs, or a disk at least 90% full, show Needs attention; a queue backlog alone does not. No library contents, albums, people or thumbnails are read, and nothing in Immich is changed.
+Details show **Photos**, **Videos**, **Library size** (all users) and **Disk used** (percentage of the volume Immich stores media on), with a **Background jobs** section below holding **Jobs pending** (active plus waiting, across all queues) and **Failed jobs**. A successful API response makes the service Online. Failed jobs, or a disk at least 90% full, show Needs attention; a queue backlog alone does not. No library contents, albums, people or thumbnails are read, and nothing in Immich is changed.
 
 ### Private certificate authorities
 

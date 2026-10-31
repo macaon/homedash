@@ -57,6 +57,7 @@ class Immich:
             {'label': 'Videos', 'value': f'{count(stats["videos"]):,}'},
             {'label': 'Library size', 'value': size(stats['usage'])},
             {'label': 'Disk used', 'value': f'{percent:.0f}% of {size(storage["diskSizeRaw"])}'},
+        ], {'sections': [{'heading': 'Background jobs', 'metrics': [
             {'label': 'Jobs pending', 'value': f'{pending:,}'},
             {'label': 'Failed jobs', 'value': f'{failed:,}'},
-        ])
+        ]}]})

@@ -31,12 +31,14 @@ class ImmichTests(unittest.TestCase):
         self.assertEqual(result.status, 'healthy')
         self.assertEqual({m['label']: m['value'] for m in result.metrics}, {
             'Photos': '22,978', 'Videos': '1,207', 'Library size': '169.8 GiB',
-            'Disk used': '58% of 11.3 TiB', 'Jobs pending': '0', 'Failed jobs': '0'})
+            'Disk used': '58% of 11.3 TiB'})
+        self.assertEqual({m['label']: m['value'] for m in result.details['sections'][0]['metrics']},
+                         {'Jobs pending': '0', 'Failed jobs': '0'})
 
     def test_pending_jobs_are_not_a_problem(self):
         result = self.poll(waiting=40)
         self.assertEqual(result.status, 'healthy')
-        self.assertEqual(result.metrics[4]['value'], '40')
+        self.assertEqual(result.details['sections'][0]['metrics'][0]['value'], '40')
 
     def test_failed_jobs_and_full_disk_need_attention(self):
         self.assertEqual(self.poll(failed=2).summary, '2 failed job(s)')
