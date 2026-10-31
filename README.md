@@ -96,6 +96,12 @@ Choose **AudioBookRequest** under Integration and enter its HTTPS base URL and A
 
 Outstanding rows show title, author, requester(s), and last request-update date, oldest first. Manual requests are labelled; rows with download errors are identified without exposing raw provider errors. Additional rows expand through **More requests**. Empty lists explicitly show **No outstanding requests**. Download errors produce Needs attention; API failures use the existing unavailable/stale behaviour. No requests or download settings are changed.
 
+### Bambuddy
+
+Choose **Bambuddy** under Integration and supply its HTTPS base URL and an API key with permission to read printer status. The connector uses `X-API-Key` and reads `/api/v1/printers/` and each printer’s `/status`. Each printer has its own section with **Connection**, **State**, **Nozzle / bed**, **AMS humidity**, and **Errors**. No print progress, archive statistics, camera or controls are shown.
+
+Disconnected printers and reported printer errors show Needs attention. Disconnected devices do not present retained sensor values as current. Missing sensors use an explicit unavailable value; printers without AMS show Not fitted, and multiple AMS readings are labelled individually. API failures retain the previous sections with the standard stale label. Credentials and printer access codes are never returned to the browser.
+
 ### Private certificate authorities
 
 Administrators manage shared certificate trust under **settings cog → Trust**. Name an upload and select one or several public PEM/DER certificate files; PEM bundles are supported too. Upload a private CA root once and all service checks and OIDC logins can trust certificates signed by it. Duplicate certificates are ignored. The list shows each certificate's subject, expiry and SHA-256 fingerprint, with a removal action.

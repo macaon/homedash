@@ -26,3 +26,5 @@
 
 .service-live-details .metrics-three{grid-template-columns:repeat(3,minmax(0,1fr))}
 @media(max-width:600px){.details-heading h3 span{display:block;margin:4px 0 0}.service-live-details .metrics-three{gap:12px}}
+
+.printer-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,130px),1fr));gap:16px}.printer-metrics>div{min-width:0}

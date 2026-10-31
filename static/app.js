@@ -148,6 +148,7 @@ function age(timestamp){if(!timestamp)return 'Never';const seconds=Math.max(0,Ma
 const activityDisclosures=new Set();
 document.addEventListener('toggle',event=>{const disclosure=event.target;if(!disclosure.matches?.('.activity-more')||!disclosure.isConnected)return;const id=disclosure.closest('[data-status]')?.dataset.status;if(id){if(disclosure.open)activityDisclosures.add(id);else activityDisclosures.delete(id);}},true);
 function activityMarkup(details, expanded=false){
+ if(Array.isArray(details?.sections))return details.sections.length?details.sections.map(section=>`<section class="activity-section" aria-label="${esc(section.heading)}"><h4>${esc(section.heading)}</h4><div class="printer-metrics">${(section.metrics||[]).map(metric=>`<div><span class="metric-label">${esc(metric.label)}</span><span class="metric-value">${esc(metric.value)}</span></div>`).join('')}</div></section>`).join(''):`<p class="activity-empty">${esc(details.empty||'No data available.')}</p>`;
  if(!details?.heading)return '';
  const rows=details.items||[];
  const rowMarkup=row=>{const progress=Number(row.progress),hasProgress=row.progress!=null&&Number.isFinite(progress),percent=Math.min(100,Math.max(0,progress)),minutes=Number(row.remaining_minutes),remaining=Number.isFinite(minutes)&&minutes>=0?(minutes>=60?`${Math.floor(minutes/60)}h ${minutes%60}m`:`${minutes}m`):'';

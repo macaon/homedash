@@ -138,8 +138,9 @@ class Proxmox:
 
 from .audiobookshelf import Audiobookshelf
 from .audiobookrequest import AudioBookRequest
+from .bambuddy import Bambuddy
 
-REGISTRY = {plugin.id:plugin for plugin in (HTTP(), Ping(), HomeAssistant(), Proxmox(), Audiobookshelf(), AudioBookRequest())}
+REGISTRY = {plugin.id:plugin for plugin in (HTTP(), Ping(), HomeAssistant(), Proxmox(), Audiobookshelf(), AudioBookRequest(), Bambuddy())}
 
 def manifest():
     return [{'id':p.id,'name':p.name,'description':p.description,'secret_label':p.secret_label,'fields':p.fields} for p in list(REGISTRY.values())]

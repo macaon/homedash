@@ -23,3 +23,10 @@ test('empty and zero-progress states remain distinct',()=>{
  assert.ok(render({heading:'Open sessions',items:[{title:'New book',progress:0}]}).includes('aria-valuenow="0"'));
  assert.equal(render({}), '');
 });
+
+test('printer sections escape text and show only requested metrics',()=>{
+ const html=render({sections:[{heading:'<P1S>',metrics:[{label:'Errors',value:'<script>bad</script>'}]}]});
+ assert.ok(html.includes('&lt;P1S&gt;'));assert.ok(html.includes('&lt;script&gt;'));assert.ok(!html.includes('<script>'));
+ assert.ok(!html.includes('progressbar'));
+ assert.ok(render({sections:[],empty:'No printers configured.'}).includes('No printers configured.'));
+});
