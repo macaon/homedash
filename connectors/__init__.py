@@ -137,8 +137,9 @@ class Proxmox:
             {'label':'Memory used','value':str(round(sum(v.get('mem',0) for v in nodes)/1024**3,1)), 'unit':'GiB'}])
 
 from .audiobookshelf import Audiobookshelf
+from .audiobookrequest import AudioBookRequest
 
-REGISTRY = {plugin.id:plugin for plugin in (HTTP(), Ping(), HomeAssistant(), Proxmox(), Audiobookshelf())}
+REGISTRY = {plugin.id:plugin for plugin in (HTTP(), Ping(), HomeAssistant(), Proxmox(), Audiobookshelf(), AudioBookRequest())}
 
 def manifest():
     return [{'id':p.id,'name':p.name,'description':p.description,'secret_label':p.secret_label,'fields':p.fields} for p in list(REGISTRY.values())]

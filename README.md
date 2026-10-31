@@ -90,6 +90,12 @@ Detail panels grow with their contents and push subsequent rows down, with no fi
 
 Checks use the existing encrypted connection secrets and server polling; the browser never calls Audiobookshelf directly. No playback controls or changes to the Audiobookshelf server are made.
 
+### AudioBookRequest
+
+Choose **AudioBookRequest** under Integration and enter its HTTPS base URL and API key. The connector reads `/api/requests` and `/api/requests/manual` with bearer authentication. Counts cover visible book requests and manual requests: **Outstanding requests**, **Filled requests**, and **Errors**. Multiple requesters for the same catalog book count as one book request. Filled means marked downloaded in AudioBookRequest, including books supplied from other sources.
+
+Outstanding rows show title, author, requester(s), and last request-update date, oldest first. Manual requests are labelled; rows with download errors are identified without exposing raw provider errors. Additional rows expand through **More requests**. Empty lists explicitly show **No outstanding requests**. Download errors produce Needs attention; API failures use the existing unavailable/stale behaviour. No requests or download settings are changed.
+
 ### Private certificate authorities
 
 Administrators manage shared certificate trust under **settings cog → Trust**. Name an upload and select one or several public PEM/DER certificate files; PEM bundles are supported too. Upload a private CA root once and all service checks and OIDC logins can trust certificates signed by it. Duplicate certificates are ignored. The list shows each certificate's subject, expiry and SHA-256 fingerprint, with a removal action.
