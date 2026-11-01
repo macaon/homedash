@@ -4,3 +4,4 @@ data/
 .env
 *.secret
 .venv/
+.registry

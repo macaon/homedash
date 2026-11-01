@@ -226,6 +226,6 @@ Drag cards to reorder, or use **Move…** in a card's menu and select a position
 
 ### Publishing images
 
-Run `./build-push.sh` from this repository to publish `docker.home.arpa/homedash:latest`. Before replacing a different current image, the script preserves it under a UTC `YYYYMMDD-HHMMSS` tag derived from that image's own build metadata. New builds are published only as `latest`; timestamp tags are rollback images. Deployments normally use `:latest`, or an archived timestamp for rollback.
+Run `REGISTRY=registry.example.net ./build-push.sh` from this repository to publish `registry.example.net/homedash:latest` (or put the registry host name in a git-ignored `.registry` file and run `./build-push.sh`). Before replacing a different current image, the script preserves it under a UTC `YYYYMMDD-HHMMSS` tag derived from that image's own build metadata. New builds are published only as `latest`; timestamp tags are rollback images. Deployments normally use `:latest`, or an archived timestamp for rollback.
 
 The Integration selector identifies a provider using its stable connector ID, independently of the card name or URL. Each integration supplies both availability and any live details: a successful authenticated API fetch is Online even when no playback sessions are open. A failed fetch changes the status and labels retained data stale. Website availability and Ping provide status for services without a dedicated integration.

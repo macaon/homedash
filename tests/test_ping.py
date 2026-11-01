@@ -5,7 +5,7 @@ from connectors import REGISTRY, validate_ping_target
 
 class PingTests(unittest.TestCase):
     def test_targets(self):
-        for value in ('host.home.arpa','192.0.2.1','::1'):
+        for value in ('host.example.net','192.0.2.1','::1'):
             self.assertEqual(validate_ping_target(value),value)
         for value in ('-c5','https://host','host:22','host;id','host\nother','a..b'):
             with self.assertRaises(ValueError):validate_ping_target(value)

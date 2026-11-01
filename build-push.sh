@@ -6,8 +6,11 @@
 set -e
 cd "$(dirname "$0")"
 name=$(basename "$(pwd)")
-img="docker.home.arpa/$name"
-api="https://docker.home.arpa/v2/$name"
+# The registry is yours: REGISTRY=registry.example.net ./build-push.sh, or put its host name in a git-ignored .registry file.
+registry="${REGISTRY:-$(cat .registry 2>/dev/null || true)}"
+[ -n "$registry" ] || { echo "Set REGISTRY (for example REGISTRY=registry.example.net) or put it in a .registry file." >&2; exit 1; }
+img="$registry/$name"
+api="https://$registry/v2/$name"
 accept="application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json"
 
 podman build -t "$img:latest" -f Containerfile .
