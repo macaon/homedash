@@ -132,6 +132,12 @@ Choose **Calibre-Web** under Integration, enter its HTTPS base URL, a username a
 
 Details show **Books**, the number of books in the library, and the **Last added book** (title, authors and the date it was added). Calibre-Web lists the newest book first and only that one row is requested. A successful sign-in and response make the service Online. Calibre-Web exposes no health, scan or disk information, so this card never shows Needs attention for the library itself. Calibre-Web limits sign-ins per user (3 a minute, 40 a day, reset on a successful sign-in), so a wrong saved password locks that user out for a while; fix the password in HomeDash and wait. Nothing else about your library is read, and nothing in Calibre-Web is changed. Single sign-on or reverse-proxy authentication in front of Calibre-Web is not supported by this connector.
 
+### Gitea
+
+Choose **Gitea** under Integration, enter its HTTPS base URL and an access token (Gitea: **Settings → Applications**). Select only **read:repository**, **read:issue** and **read:organization**. The connector sends `Authorization: token …` and reads `/api/v1/repos/search`, `/api/v1/repos/issues/search` and `/api/v1/orgs`, each asking for one item and using the `X-Total-Count` header, so no repository names, code or issue text is read. A successful API response makes the service Online. Forgejo uses the same API.
+
+Details show **Repositories**, **Open issues**, **Open pull requests** and **Organizations**, as far as the token's user can see them; a token limited to public repositories counts only those. Gitea has no general health endpoint, so this card never shows Needs attention for the instance itself. **Do not give the token administrator (`read:admin`) access.** The connector does not need it, never calls an administrator endpoint, and that scope can read every user's email address and the CI runner registration token. Nothing in Gitea is changed.
+
 ### HomePod
 
 Choose **HomePod** under Integration, enter its HTTPS base URL and an API token. In HomePod, create the token under **Server settings → Access → API tokens** with the **Read** level; nothing more is needed or used. The connector reads `/api/hosts` and each host's `/containers` with bearer authentication.
