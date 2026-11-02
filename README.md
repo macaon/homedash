@@ -128,7 +128,7 @@ Details show **Series**, **Books**, **Unread** and **In progress**, with a **Lib
 
 ### Calibre-Web
 
-Choose **Calibre-Web** under Integration, enter its HTTPS base URL, a username and that user's password. Calibre-Web has no API tokens, so the connector signs in with the normal login form on every refresh and reads the total from the Books list table (`/ajax/listbooks`, one row requested). The password is stored encrypted like other secrets, so **use a dedicated user** with no admin, upload or edit rights; it needs only the **Show books list** permission. Without that permission, or with a wrong password, the card shows a clear error instead of an empty library.
+Choose **Calibre-Web** under Integration, enter its HTTPS base URL, a username and that user's password. Calibre-Web has no API tokens, so the connector signs in with the normal login form on every refresh and reads the total from the Books list table (`/ajax/listbooks`, one row requested). The password is stored encrypted like other secrets, so **use a dedicated user** with no admin, upload or edit rights; it needs only the **Show books list** permission. Without that permission, or with a wrong password, the card shows as unavailable instead of an empty library; HomeDash never displays provider error text.
 
 Details show **Books**, the number of books in the library, and the **Last added book** (title, authors and the date it was added). Calibre-Web lists the newest book first and only that one row is requested. A successful sign-in and response make the service Online. Calibre-Web exposes no health, scan or disk information, so this card never shows Needs attention for the library itself. Calibre-Web limits sign-ins per user (3 a minute, 40 a day, reset on a successful sign-in), so a wrong saved password locks that user out for a while; fix the password in HomeDash and wait. Nothing else about your library is read, and nothing in Calibre-Web is changed. Single sign-on or reverse-proxy authentication in front of Calibre-Web is not supported by this connector.
 
@@ -137,6 +137,12 @@ Details show **Books**, the number of books in the library, and the **Last added
 Choose **Gitea** under Integration, enter its HTTPS base URL and an access token (Gitea: **Settings → Applications**). Select only **read:repository**, **read:issue** and **read:organization**. The connector sends `Authorization: token …` and reads `/api/v1/repos/search`, `/api/v1/repos/issues/search` and `/api/v1/orgs`, each asking for one item and using the `X-Total-Count` header, so no repository names, code or issue text is read. A successful API response makes the service Online. Forgejo uses the same API.
 
 Details show **Repositories**, **Open issues**, **Open pull requests** and **Organizations**, as far as the token's user can see them; a token limited to public repositories counts only those. Gitea has no general health endpoint, so this card never shows Needs attention for the instance itself. **Do not give the token administrator (`read:admin`) access.** The connector does not need it, never calls an administrator endpoint, and that scope can read every user's email address and the CI runner registration token. Nothing in Gitea is changed.
+
+### Mylar3
+
+Choose **Mylar3** under Integration, enter its HTTPS base URL and the API key (Mylar3: **Configuration → Web Interface → API**; the API must be enabled). Mylar accepts the key only as a query parameter (`/api?apikey=…&cmd=…`), so it appears in the request URL and can end up in Mylar's or a reverse proxy's access logs; where you can, point HomeDash at an internal address. The connector calls `getIndex`, `getWanted` and `getUpcoming`. Mylar answers HTTP 200 even for errors, so a wrong key shows as unavailable, not as an empty library.
+
+Details show **Series**, **Issues** (total issues tracked across all series), **Wanted** (issues Mylar is searching for) and **Upcoming**, with a **Series** section counting Active, Paused and Ended. Mylar has no health endpoint, so this card never shows Needs attention for the instance itself. The download history and logs are not read: they grow without limit and are not needed. No titles are shown, and nothing in Mylar is changed.
 
 ### HomePod
 
