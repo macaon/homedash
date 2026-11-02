@@ -120,6 +120,12 @@ Choose **Paperless-ngx** under Integration, enter its HTTPS base URL and an API 
 
 Details show **Documents**, **Inbox** (documents still waiting to be sorted) and **Disk used** (percentage of the volume Paperless stores documents on), with a **Health** section holding **Failed imports (30 days)** and **Components failing**. Failed imports, a disk at least 90% full, or a database, Redis, worker, search-index or sanity-check error show Needs attention; a full inbox alone does not. The classifier is not watched, because Paperless reports it as failing for a while after every import. System status is administrator-only in Paperless: with an ordinary user's token the card still shows the totals, without disk use or the Health section. Document titles and contents are never read, and nothing in Paperless is changed.
 
+### Komga
+
+Choose **Komga** under Integration, enter its HTTPS base URL and an API key (create it under your account settings in Komga). The connector reads `/api/v1/libraries`, `/api/v1/series` and `/api/v1/books` with the `X-API-Key` header, requesting one item per query so only the totals matter. A successful API response makes the service Online.
+
+Details show **Series**, **Books**, **Unread** and **In progress**, with a **Library health** section holding **Libraries**, **Unavailable** (libraries Komga cannot reach), **Unreadable books** and **Unsupported books**. A library that is unavailable shows Needs attention. Unreadable and unsupported books are listed but do not change the status, because they stay until the file is replaced. Counts follow the key's user and its library access. No titles, covers or pages are shown, and nothing in Komga is changed.
+
 ### HomePod
 
 Choose **HomePod** under Integration, enter its HTTPS base URL and an API token. In HomePod, create the token under **Server settings → Access → API tokens** with the **Read** level; nothing more is needed or used. The connector reads `/api/hosts` and each host's `/containers` with bearer authentication.
