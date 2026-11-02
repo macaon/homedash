@@ -30,6 +30,7 @@ class MylarTests(unittest.TestCase):
             'Series': '4', 'Issues': '18', 'Wanted': '3', 'Upcoming': '1'}))
         self.assertEqual({m['label']: m['value'] for m in result.details['sections'][0]['metrics']},
                          {'Active': '2', 'Paused': '1', 'Ended': '1'})
+        self.assertEqual(result.details['sections'][0]['heading'], 'By status')  # not the same label as a top-row metric
         self.assertNotIn('Fixture A', str(result))
 
     def test_wrong_key_is_an_error_not_an_empty_library(self):

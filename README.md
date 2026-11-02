@@ -142,7 +142,7 @@ Details show **Repositories**, **Open issues**, **Open pull requests** and **Org
 
 Choose **Mylar3** under Integration, enter its HTTPS base URL and the API key (Mylar3: **Configuration → Web Interface → API**; the API must be enabled). Mylar accepts the key only as a query parameter (`/api?apikey=…&cmd=…`), so it appears in the request URL and can end up in Mylar's or a reverse proxy's access logs; where you can, point HomeDash at an internal address. The connector calls `getIndex`, `getWanted` and `getUpcoming`. Mylar answers HTTP 200 even for errors, so a wrong key shows as unavailable, not as an empty library.
 
-Details show **Series**, **Issues** (total issues tracked across all series), **Wanted** (issues Mylar is searching for) and **Upcoming**, with a **Series** section counting Active, Paused and Ended. Mylar has no health endpoint, so this card never shows Needs attention for the instance itself. The download history and logs are not read: they grow without limit and are not needed. No titles are shown, and nothing in Mylar is changed.
+Details show **Series**, **Issues** (total issues tracked across all series), **Wanted** (issues Mylar is searching for) and **Upcoming**, with a **By status** section counting Active, Paused and Ended series. Mylar has no health endpoint, so this card never shows Needs attention for the instance itself. The download history and logs are not read: they grow without limit and are not needed. No titles are shown, and nothing in Mylar is changed.
 
 ### HomePod
 

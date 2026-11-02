@@ -40,4 +40,4 @@ class Mylar:
             {'label': 'Issues', 'value': f'{issues:,}'},
             {'label': 'Wanted', 'value': f'{len(wanted):,}'},
             {'label': 'Upcoming', 'value': f'{len(upcoming):,}'},
-        ], {'sections': [{'heading': 'Series', 'metrics': [{'label': state, 'value': f'{count:,}'} for state, count in states.items()]}]})
+        ], {'sections': [{'heading': 'By status', 'metrics': [{'label': state, 'value': f'{count:,}'} for state, count in states.items()]}]})
