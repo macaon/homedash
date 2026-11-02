@@ -114,6 +114,12 @@ Choose **Immich** under Integration and enter its HTTPS base URL and an API key.
 
 Details show **Photos**, **Videos**, **Library size** (all users) and **Disk used** (percentage of the volume Immich stores media on), with a **Background jobs** section below holding **Jobs pending** (active plus waiting, across all queues) and **Failed jobs**. A successful API response makes the service Online. Failed jobs, or a disk at least 90% full, show Needs attention; a queue backlog alone does not. No library contents, albums, people or thumbnails are read, and nothing in Immich is changed.
 
+### Paperless-ngx
+
+Choose **Paperless-ngx** under Integration, enter its HTTPS base URL and an API token (create it under your profile in Paperless). The connector reads `/api/statistics/` and `/api/status/` with `Authorization: Token`. A successful API response makes the service Online.
+
+Details show **Documents**, **Inbox** (documents still waiting to be sorted) and **Disk used** (percentage of the volume Paperless stores documents on), with a **Health** section holding **Failed imports (30 days)** and **Components failing**. Failed imports, a disk at least 90% full, or a database, Redis, worker, search-index or sanity-check error show Needs attention; a full inbox alone does not. The classifier is not watched, because Paperless reports it as failing for a while after every import. System status is administrator-only in Paperless: with an ordinary user's token the card still shows the totals, without disk use or the Health section. Document titles and contents are never read, and nothing in Paperless is changed.
+
 ### HomePod
 
 Choose **HomePod** under Integration, enter its HTTPS base URL and an API token. In HomePod, create the token under **Server settings → Access → API tokens** with the **Read** level; nothing more is needed or used. The connector reads `/api/hosts` and each host's `/containers` with bearer authentication.
