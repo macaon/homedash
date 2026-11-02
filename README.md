@@ -126,6 +126,12 @@ Choose **Komga** under Integration, enter its HTTPS base URL and an API key (cre
 
 Details show **Series**, **Books**, **Unread** and **In progress**, with a **Library health** section holding **Libraries**, **Unavailable** (libraries Komga cannot reach), **Unreadable books** and **Unsupported books**. A library that is unavailable shows Needs attention. Unreadable and unsupported books are listed but do not change the status, because they stay until the file is replaced. Counts follow the key's user and its library access. No titles, covers or pages are shown, and nothing in Komga is changed.
 
+### Calibre-Web
+
+Choose **Calibre-Web** under Integration, enter its HTTPS base URL, a username and that user's password. Calibre-Web has no API tokens, so the connector signs in with the normal login form on every refresh and reads the total from the Books list table (`/ajax/listbooks`, one row requested). The password is stored encrypted like other secrets, so **use a dedicated user** with no admin, upload or edit rights; it needs only the **Show books list** permission. Without that permission, or with a wrong password, the card shows a clear error instead of an empty library.
+
+Details show **Books**, the number of books in the library, and **Last added**, the date the newest book was added (Calibre-Web lists the newest first; only that date is read, never the title). A successful sign-in and response make the service Online. Calibre-Web exposes no health, scan or disk information, so this card never shows Needs attention for the library itself. Calibre-Web limits sign-ins per user (3 a minute, 40 a day, reset on a successful sign-in), so a wrong saved password locks that user out for a while; fix the password in HomeDash and wait. No titles or authors are shown, and nothing in Calibre-Web is changed. Single sign-on or reverse-proxy authentication in front of Calibre-Web is not supported by this connector.
+
 ### HomePod
 
 Choose **HomePod** under Integration, enter its HTTPS base URL and an API token. In HomePod, create the token under **Server settings → Access → API tokens** with the **Read** level; nothing more is needed or used. The connector reads `/api/hosts` and each host's `/containers` with bearer authentication.

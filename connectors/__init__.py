@@ -143,9 +143,10 @@ from .homepod import HomePod
 from .immich import Immich
 from .paperless import Paperless
 from .komga import Komga
+from .calibreweb import CalibreWeb
 from .bookstack import BookStack
 
-REGISTRY = {plugin.id:plugin for plugin in (HTTP(), Ping(), HomeAssistant(), Proxmox(), Audiobookshelf(), AudioBookRequest(), Bambuddy(), BookStack(), Immich(), Paperless(), Komga(), HomePod())}
+REGISTRY = {plugin.id:plugin for plugin in (HTTP(), Ping(), HomeAssistant(), Proxmox(), Audiobookshelf(), AudioBookRequest(), Bambuddy(), BookStack(), Immich(), Paperless(), Komga(), CalibreWeb(), HomePod())}
 
 def manifest():
     return [{'id':p.id,'name':p.name,'description':p.description,'secret_label':p.secret_label,'fields':p.fields} for p in list(REGISTRY.values())]
