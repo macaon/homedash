@@ -7,7 +7,7 @@ FORM = '<form><input type="hidden" name="csrf_token" value="fixture-csrf"><input
 
 
 class CalibreWebTests(unittest.TestCase):
-    def poll(self, password='fixture-password', allowed=True, login_status=None, rows=({'atom_timestamp': '2025-08-24T20:23:25+00:00', 'title': 'Fixture'},)):
+    def poll(self, password='fixture-password', allowed=True, login_status=None, rows=({'atom_timestamp': '2025-08-24T20:23:25+00:00', 'title': 'Fixture Title', 'authors': 'A. Author & B. Writer'},)):
         def handler(request):
             path = request.url.path
             if path == '/login' and request.method == 'GET':
@@ -32,15 +32,14 @@ class CalibreWebTests(unittest.TestCase):
                 return await REGISTRY['calibreweb'].poll(client, 'https://books.example', {'username': 'reader'}, password)
         return asyncio.run(run())
 
-    def test_book_total(self):
+    def test_book_total_and_newest_book(self):
         result = self.poll()
-        self.assertEqual((result.status, result.metrics), ('healthy', [{'label': 'Books', 'value': '1,094'},
-                                                                       {'label': 'Last added', 'value': '2025-08-24'}]))
-        self.assertNotIn('Fixture', str(result))
+        self.assertEqual((result.status, result.metrics), ('healthy', [{'label': 'Books', 'value': '1,094'}]))
+        self.assertEqual(result.details['items'], [{'title': 'Fixture Title', 'subtitle': 'A. Author & B. Writer', 'date': '2025-08-24'}])
 
-    def test_empty_library_or_missing_timestamp_still_shows_the_total(self):
-        for rows in ((), ({'title': 'x'},)):
-            self.assertEqual(self.poll(rows=rows).metrics, [{'label': 'Books', 'value': '1,094'}])
+    def test_empty_library_or_missing_timestamp_still_works(self):
+        self.assertEqual(self.poll(rows=()).details['items'], [])
+        self.assertEqual(self.poll(rows=({'title': 'x'},)).details['items'], [{'title': 'x', 'subtitle': '', 'date': ''}])
 
     def test_clear_errors(self):
         for kwargs, message in (({'password': 'wrong'}, 'rejected the username or password'),

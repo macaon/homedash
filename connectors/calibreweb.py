@@ -1,4 +1,4 @@
-"""Read-only book total and last-added date for Calibre-Web. It has no API, so this signs in like a browser
+"""Read-only book total and newest book for Calibre-Web. It has no API, so this signs in like a browser
 and reads the Books list table, which reports its total and lists the newest book first; one row is requested."""
 import re
 from datetime import datetime
@@ -38,10 +38,13 @@ class CalibreWeb:
         total = books.json()['totalNotFiltered']
         if type(total) is not int or total < 0:
             raise ValueError('Expected a book total')
-        metrics = [{'label': 'Books', 'value': f'{total:,}'}]
-        try:  # only the timestamp is read from the newest book; its title is never kept
-            metrics.append({'label': 'Last added', 'value': datetime.fromisoformat(books.json()['rows'][0]['atom_timestamp']).date().isoformat()})
-        except (IndexError, KeyError, TypeError, ValueError):
-            pass  # an empty library, or a version without the field, still shows the total
+        rows = []
+        for row in books.json()['rows'][:1]:
+            try:
+                added = datetime.fromisoformat(row['atom_timestamp']).date().isoformat()
+            except (KeyError, TypeError, ValueError):
+                added = ''  # a version without the field still shows the book
+            rows.append({'title': str(row['title'])[:250], 'subtitle': str(row.get('authors') or '')[:250], 'date': added})
         from . import Result
-        return Result('healthy', 'Calibre-Web available', metrics)
+        return Result('healthy', 'Calibre-Web available', [{'label': 'Books', 'value': f'{total:,}'}],
+                      {'heading': 'Last added book', 'items': rows, 'empty': 'No books in the library.'})
