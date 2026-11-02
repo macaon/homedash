@@ -28,7 +28,7 @@ When using a reverse proxy, set the exact external URL before starting:
 HOMEDASH_PUBLIC_URL=https://dashboard.example.net docker compose up -d
 ```
 
-The example Compose binds loopback by default. Set `HOMEDASH_BIND` to a private interface address if a proxy on another host needs access. TLS terminates at your reverse proxy. `HOMEDASH_IMAGE` selects a published image instead of a local build. Run one Uvicorn worker per database; its background task owns the polling schedule.
+The example Compose binds loopback by default. Set `HOMEDASH_BIND` to a private interface address if a proxy on another host needs access. TLS terminates at your reverse proxy. **Sign-in protection.** After 10 failed sign-ins for an account from one source within five minutes, further attempts get HTTP 429 until the window passes. Behind a reverse proxy set `HOMEDASH_TRUSTED_PROXIES` to the proxy's address or network (for example `172.28.0.1`) so the limit sees the real client instead of the proxy; without it everyone behind the proxy shares one limit. Forwarded headers are believed only from those addresses. `HOMEDASH_IMAGE` selects a published image instead of a local build. Run one Uvicorn worker per database; its background task owns the polling schedule.
 
 ## Add services and groups
 

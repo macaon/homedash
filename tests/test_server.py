@@ -23,7 +23,7 @@ class DashboardTests(unittest.TestCase):
             c.execute('DELETE FROM users')
             c.execute('DELETE FROM trust_certificates')
             c.execute("DELETE FROM settings WHERE key IN ('oidc','ui')")
-        server.ATTEMPTS.clear()
+        server.guard.failures.clear();server.guard.blocked.clear();server.guard.audited.clear()
         server.POLL_LOCKS.clear()
         self.client=TestClient(server.app)
         self.assertEqual(self.client.post('/api/setup',json={'username':'admin','password':PASSWORD}).status_code,200)
@@ -415,5 +415,26 @@ class UISettingsTests(unittest.TestCase):
         self.assertEqual(anonymous.get('/api/state').json()['ui']['theme'],'light')
         self.assertEqual(anonymous.put('/api/settings/ui',json={'theme':'dark'}).status_code,401)
         self.assertEqual(self.client.put('/api/settings/ui',json={'theme':'bad'}).status_code,422)
+
+    def test_sign_in_is_blocked_after_ten_failures(self):
+        other=TestClient(server.app)
+        codes=[other.post('/api/login',json={'username':'admin','password':'wrong password value'}).status_code for _ in range(13)]
+        self.assertEqual(codes,[401]*10+[429]*3)
+        self.assertEqual(other.post('/api/login',json={'username':'admin','password':PASSWORD}).status_code,429)  # even the right password, while blocked
+        server.guard.failures.clear()
+        self.assertEqual(other.post('/api/login',json={'username':'admin','password':PASSWORD}).status_code,200)
+
+    def test_real_client_address_is_used_only_when_the_sender_is_a_trusted_proxy(self):
+        def attempt(headers,password='wrong password value',client=None):
+            return (client or proxy).post('/api/login',json={'username':'admin','password':password},headers=headers).status_code
+        proxy=TestClient(server.app,client=('172.28.0.1',50000))
+        with patch.object(server.guard,'networks',()):  # nothing trusted: rotating the header gains nothing
+            self.assertEqual([attempt({'X-Forwarded-For':'198.51.100.%d'%n}) for n in range(12)],[401]*10+[429]*2)
+        server.guard.failures.clear()
+        with patch.object(server.guard,'networks',server.parse_networks('172.28.0.1')):
+            self.assertEqual([attempt({'X-Forwarded-For':'198.51.100.7'}) for _ in range(11)],[401]*10+[429])  # the attacker is blocked...
+            self.assertEqual(attempt({'X-Forwarded-For':'192.0.2.44'},password=PASSWORD),200)  # ...the administrator is not
+            stranger=TestClient(server.app,client=('203.0.113.9',50000))  # not a proxy: its header is ignored
+            self.assertEqual([attempt({'X-Forwarded-For':'192.0.2.44'},client=stranger) for _ in range(11)],[401]*10+[429])
 
 if __name__=='__main__':unittest.main()

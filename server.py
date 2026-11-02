@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from urllib.parse import urlsplit
 from pydantic import BaseModel, Field, field_validator
 from starlette.middleware.sessions import SessionMiddleware
+from home_security import LoginGuard, parse_networks
 
 ROOT = Path(__file__).resolve().parent
 DATA = Path(os.environ.get('HOMEDASH_DATA', './data'))
@@ -79,19 +80,9 @@ if ISSUER:
         options['verify'] = os.environ['HOMEDASH_OIDC_CA_FILE']
     oauth.register('oidc', server_metadata_url=ISSUER.rstrip('/')+'/.well-known/openid-configuration', client_id=CLIENT, client_secret=Path(SECRET_FILE).read_text().strip(), client_kwargs=options)
 
-# Password login attempts are bounded per source and account. No credentials are logged.
-ATTEMPTS = {}
-
-def rate_limit(request, username):
-    now = time.monotonic()
-    for key in list(ATTEMPTS):
-        ATTEMPTS[key] = [t for t in ATTEMPTS[key] if now-t < 300]
-        if not ATTEMPTS[key]:
-            del ATTEMPTS[key]
-    key = (request.client.host, username)
-    if len(ATTEMPTS.get(key, [])) >= 10:
-        raise HTTPException(429, 'Too many attempts. Try again in five minutes.')
-    ATTEMPTS.setdefault(key, []).append(now)
+# Password sign-ins are limited per source and account, and the real client address comes from a trusted proxy only.
+# HOMEDASH_TRUSTED_PROXIES lists the reverse proxy's address or network, for example 172.28.0.1 or 10.0.0.0/8.
+guard = LoginGuard(parse_networks(os.environ.get('HOMEDASH_TRUSTED_PROXIES', '')))
 
 @app.middleware('http')
 async def boundary(request, call_next):
@@ -321,11 +312,13 @@ def setup(body: Login, request: Request):
 
 @app.post('/api/login')
 def login(body: Login, request: Request):
-    rate_limit(request, body.username)
+    guard.check(request, body.username)
     with db() as c:
         user = c.execute('SELECT * FROM users WHERE username=?', (body.username,)).fetchone()
     if not password_ok(body.password, user['password'] if user else None):
+        guard.fail(request, body.username)
         raise HTTPException(401, 'Incorrect username or password')
+    guard.success(request, body.username)
     sign_in(request, user)
     return public_user(user)
 
