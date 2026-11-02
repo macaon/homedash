@@ -150,6 +150,12 @@ Choose **HomePod** under Integration, enter its HTTPS base URL and an API token.
 
 Details show **Hosts online**, **Containers running** and **Not running**, followed by **Needs attention**, which is exactly what HomePod itself reports at `/api/attention`: unhealthy, restarting or dead containers, offline or unreachable hosts, agent certificates that are not renewing, and update-check problems. Pending image updates are listed as notices and do not change the card's status. Stopped containers are counted but not flagged, because many are one-shot jobs. Alerts ignored in HomePod do not appear; a note says how many are ignored. Any other item makes the card show Needs attention. A rejected or expired token is shown as unavailable rather than as an empty fleet. Nothing is started, stopped or changed.
 
+### HomeCA
+
+Choose **HomeCA** under Integration, enter its HTTPS base URL and an API token. In HomeCA, create the token under **Server settings → Access → API tokens** (the only level is **Read**). The connector reads one route, `/api/summary`, with bearer authentication. That token can never download a private key, list or fetch certificates, issue, revoke or change anything.
+
+Details show **Certificates** (active leaves), **Expiring soon** (30 days or less), **Expired** and **Nearest CA expiry**, followed by **Needs attention**: an expired certificate or CA, a CA with fewer than 90 days left, a CA whose revocation list is overdue (HomeCA refreshes lists daily), a certificate you must renew by hand that is about to expire, and an ACME certificate with 7 days or less left (ACME clients renew at two-thirds of a certificate's life, so this means renewal is failing). An ACME certificate still inside its renewal window is not listed. The note says whether ACME is on. Names of certificates appear only in the attention list. A rejected or expired token is shown as unavailable rather than as an empty CA. Nothing is changed.
+
 ### Private certificate authorities
 
 Administrators manage shared certificate trust under **settings cog → Trust**. Name an upload and select one or several public PEM/DER certificate files; PEM bundles are supported too. Upload a private CA root once and all service checks and OIDC logins can trust certificates signed by it. Duplicate certificates are ignored. The list shows each certificate's subject, expiry and SHA-256 fingerprint, with a removal action.
