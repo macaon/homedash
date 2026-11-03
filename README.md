@@ -16,16 +16,18 @@ Docker, OPNsense and Synology are available as **link presets**, not live connec
 ## Run with a container
 
 ```sh
-docker build -f Containerfile -t homedash:latest .
-docker compose up -d
+cp .env.example .env     # optional: every setting has a default
+docker compose up --build -d
 ```
 
-Open `http://127.0.0.1:8790` and create your first administrator account. No default password or deployment-specific hosts ship in this repository.
+Open `http://127.0.0.1:8790` and create your first administrator account. No default password or deployment-specific hosts ship in this repository. Podman Compose works too.
 
-When using a reverse proxy, set the exact external URL before starting:
+Compose builds the image from the `Containerfile`. Run it with `--build` again after pulling new source, otherwise it keeps reusing the existing image.
+
+When using a reverse proxy, set the exact external URL in `.env` before starting:
 
 ```sh
-HOMEDASH_PUBLIC_URL=https://dashboard.example.net docker compose up -d
+HOMEDASH_PUBLIC_URL=https://dashboard.example.net
 ```
 
 The example Compose binds loopback by default. Set `HOMEDASH_BIND` to a private interface address if a proxy on another host needs access. TLS terminates at your reverse proxy. **Sign-in protection.** After 10 failed sign-ins for an account from one source within five minutes, further attempts get HTTP 429 until the window passes. Behind a reverse proxy set `HOMEDASH_TRUSTED_PROXIES` to the proxy's address or network (for example `172.28.0.1`) so the limit sees the real client instead of the proxy; without it everyone behind the proxy shares one limit. Forwarded headers are believed only from those addresses. `HOMEDASH_IMAGE` selects a published image instead of a local build. Run one Uvicorn worker per database; its background task owns the polling schedule.
