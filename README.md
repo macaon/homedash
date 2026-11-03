@@ -176,13 +176,15 @@ Alerts are published per regional operator, and train events are often in a neig
 
 The feeds only contain what the operators publish as structured alerts, so this can be less than their own websites list. Each feed is fetched at most once every ten minutes however short the refresh interval is, to stay inside the free key's 30,000 calls a month. The alert format is binary GTFS-Realtime, read by a small built-in decoder; no extra dependency is needed.
 
-### Public transport departures
+### Public transport times
 
-A header widget showing the next departures at a stop, for all lines or only the ones you follow (for example `9, 14, 123`), with live delays where the operator provides them. It uses [Trafiklab](https://www.trafiklab.se/)'s Realtime APIs: create a free project with **Trafiklab Realtime APIs** enabled and paste its key as the token. Choose **+ Add → Widget → Public transport departures**, enter the key, then search for the stop by name.
+A header widget for the next departures and arrivals at a stop, for all lines or only the ones you follow (for example `9, 14, 123`), with live delays where the operator provides them. It uses [Trafiklab](https://www.trafiklab.se/)'s Realtime APIs: create a free project with **Trafiklab Realtime APIs** enabled and paste its key as the token. Choose **+ Add → Widget → Public transport times**, enter the key, then search for the stop by name.
 
-Live data is **not always available or accurate**, in any region. Many departures only have a timetable time and are shown as *Scheduled*, never as on time; the widget only says *On time*, *+5 min* or *Cancelled* when the operator supplies live data, and that data can still be late or wrong. Treat it as a guide. The API shows the next 60 minutes only, and the data is CC BY 4.0, so the panel credits Trafiklab.
+**Show in the header** sets what the chip and headline follow: **Departures**, **Arrivals**, or **Whichever is next**, which says for example "9 departs in 6 min" or "123 arrives in 4 min". The details always list both departures and arrivals, side by side, with the selected one first. Arrivals say where the vehicle comes from ("355 ← Braås centrum"). Widgets made before this setting existed keep showing departures.
 
-To stay inside the free key's limits (25 calls a minute, 100,000 a month), each stop is fetched at most once every two minutes however short the refresh interval is, and shared between widgets. HomeDash also stops polling this widget while nobody has the dashboard open, and backs off for two minutes after an error such as an exceeded quota.
+Live data is **not always available or accurate**, in any region. Many departures only have a timetable time and are shown as *Scheduled*, never as on time; the widget only says *On time*, *+5 min* or *Cancelled* when the operator supplies live data, and that data can still be late or wrong. Arrivals tend to have live data more often than departures, because those vehicles are already running. Treat it all as a guide. The API shows the next 60 minutes only, and the data is CC BY 4.0, so the panel credits Trafiklab.
+
+To stay inside the free key's limits (25 calls a minute, 100,000 a month), each list is fetched at most once every two minutes however short the refresh interval is, and shared between widgets. The list the headline does not use is refreshed every five minutes. HomeDash also stops polling this widget while nobody has the dashboard open, and backs off for two minutes after an error such as an exceeded quota. A stop watched around the clock in **Whichever is next** mode uses about 43,000 calls a month.
 
 ### Private certificate authorities
 
