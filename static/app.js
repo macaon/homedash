@@ -19,6 +19,7 @@ function dropdown(btnId,panelId) {
   document.addEventListener('keydown',e=>{if(e.key==='Escape')close();});
 }
 dropdown('account-btn','account-panel');
+dropdown('add-btn','add-panel');
 let themeAccount=null,themeDefault=window.HOME_UI_DEFAULT||'auto';
 function applyTheme(){if(themeDefault==='auto')delete document.documentElement.dataset.theme;else document.documentElement.dataset.theme=themeDefault;}
 applyTheme();
@@ -171,6 +172,7 @@ async function cardEditor(card){
 }
 $('add-card').onclick=()=>cardEditor();
 $('add-widget').onclick=()=>widgetEditor();
+$('add-group-menu').onclick=()=>groupEditor();
 function renderGroups(){
  $('group-list').innerHTML=catalog.groups.length?catalog.groups.map((g,i)=>`<div class="row-item"><div class="main"><span class="title">${esc(g.name)}</span><span class="sub">${catalog.cards.filter(c=>c.group_id===g.id).length} services</span></div><button class="ghost" data-group-up="${g.id}" aria-label="Move ${esc(g.name)} earlier" ${i===0?'disabled':''}>↑</button><button class="ghost" data-group-down="${g.id}" aria-label="Move ${esc(g.name)} later" ${i===catalog.groups.length-1?'disabled':''}>↓</button><button class="ghost" data-group-edit="${g.id}">Edit</button><button class="ghost danger" data-group-delete="${g.id}">Remove</button></div>`).join(''):'<p class="mini">No groups yet. Cards are shown together until you add one.</p>';
  for(const direction of ['up','down'])document.querySelectorAll(`[data-group-${direction}]`).forEach(b=>b.onclick=async()=>{const ids=catalog.groups.map(g=>g.id),at=ids.indexOf(b.dataset[direction==='up'?'groupUp':'groupDown']),next=at+(direction==='up'?-1:1);[ids[at],ids[next]]=[ids[next],ids[at]];try{await api('/api/order/groups','PUT',{ids});await load();}catch(e){toast(e.message,true);}});

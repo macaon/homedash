@@ -9,7 +9,7 @@
 <p class="muted intro">Your homelab, at a glance.</p>
 <section id="widgets" class="widgets" aria-label="Live widgets" hidden></section>
 <section id="dashboard-panel">
-<div class="toolbar"><h2>Dashboard</h2><span class="spacer"></span><input id="search" class="search" placeholder="Find a service…" aria-label="Find a service"><button id="manage-groups">Groups</button><button id="add-widget" hidden>+ Add widget</button><button class="primary" id="add-card">+ Add service</button></div>
+<div class="toolbar"><h2>Dashboard</h2><span class="spacer"></span><input id="search" class="search" placeholder="Find a service…" aria-label="Find a service"><div class="add-menu"><button class="primary" id="add-btn" aria-haspopup="true" aria-expanded="false">+ Add ▾</button><div id="add-panel" class="menu-panel"><button id="add-card">Service</button><button id="add-widget" hidden>Widget</button><button id="add-group-menu">Group</button><hr><button id="manage-groups">Manage groups…</button></div></div></div>
 <div id="dashboard"></div></section>
 <footer class="page-foot"><span id="sync-state">Live status updates every 15 seconds</span><button class="ghost" id="refresh">Refresh status</button></footer>
 </main>
