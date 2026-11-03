@@ -1,8 +1,8 @@
 # HomeDash
 
-A self-hosted homelab dashboard in the Home* design language. Browser links stay useful on their own; attach a connection when you want live status.
+A self-hosted homelab dashboard. Each service is a card that links to it; attach a connection to a card when you want live status such as availability, playback sessions or cluster health. Dashboards are private per user, and it runs as a single container.
 
-## Included in this first version
+## Features
 
 - Compact service cards with icons, descriptions, browser links, search and overflow menus.
 - Named groups, group ordering, drag ordering within groups, and keyboard-accessible Move earlier/later actions.
@@ -146,11 +146,15 @@ Details show **Series**, **Issues** (total issues tracked across all series), **
 
 ### HomePod
 
+HomePod is a self-hosted Docker management web app.
+
 Choose **HomePod** under Integration, enter its HTTPS base URL and an API token. In HomePod, create the token under **Server settings → Access → API tokens** with the **Read** level; nothing more is needed or used. The connector reads `/api/hosts` and each host's `/containers` with bearer authentication.
 
 Details show **Hosts online**, **Containers running** and **Not running**, followed by **Needs attention**, which is exactly what HomePod itself reports at `/api/attention`: unhealthy, restarting or dead containers, offline or unreachable hosts, agent certificates that are not renewing, and update-check problems. Pending image updates are listed as notices and do not change the card's status. Stopped containers are counted but not flagged, because many are one-shot jobs. Alerts ignored in HomePod do not appear; a note says how many are ignored. Any other item makes the card show Needs attention. A rejected or expired token is shown as unavailable rather than as an empty fleet. Nothing is started, stopped or changed.
 
 ### HomeCA
+
+[HomeCA](https://github.com/macaon/homeca) is a small self-hosted certificate authority.
 
 Choose **HomeCA** under Integration, enter its HTTPS base URL and an API token. In HomeCA, create the token under **Server settings → Access → API tokens** (the only level is **Read**). The connector reads one route, `/api/summary`, with bearer authentication. That token can never download a private key, list or fetch certificates, issue, revoke or change anything.
 
@@ -238,7 +242,7 @@ Settings cog → **User Interface** sets the server default to Auto, Light or Da
 
 Additional outbound CA certificates are managed under **Server settings → Trust**. The same store supplies both service checks and OIDC; the OAuth / OIDC tab links there rather than duplicating certificate fields. Public system roots remain trusted.
 
-Trust uses the unchanged shared HomeTemplate `home-trust.js` and `home-trust.css` component. Uploads, certificate rows, messages and removal confirmation have one layout across Home* apps. OIDC provider roots belong in Trust. App-specific scope details are under “Where this trust store applies.”
+Trust uses the shared `home-trust.js` and `home-trust.css` components, which are vendored in this repository. OIDC provider roots belong in Trust. App-specific scope details are under “Where this trust store applies.”
 
 ### Ping checks
 
@@ -265,3 +269,11 @@ Drag cards to reorder, or use **Move…** in a card's menu and select a position
 Run `REGISTRY=registry.example.net ./build-push.sh` from this repository to publish `registry.example.net/homedash:latest` (or put the registry host name in a git-ignored `.registry` file and run `./build-push.sh`). Before replacing a different current image, the script preserves it under a UTC `YYYYMMDD-HHMMSS` tag derived from that image's own build metadata. New builds are published only as `latest`; timestamp tags are rollback images. Deployments normally use `:latest`, or an archived timestamp for rollback.
 
 The Integration selector identifies a provider using its stable connector ID, independently of the card name or URL. Each integration supplies both availability and any live details: a successful authenticated API fetch is Online even when no playback sessions are open. A failed fetch changes the status and labels retained data stale. Website availability and Ping provide status for services without a dedicated integration.
+
+## License
+
+HomeDash is free software, released under the GNU General Public License, version 3. See [LICENSE](LICENSE).
+
+## AI disclosure
+
+Parts of this project's code, tests and documentation were written with the help of AI coding assistants. A human directs the work and reviews it. Use at your own risk.
