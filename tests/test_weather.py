@@ -10,7 +10,7 @@ class WeatherTests(unittest.TestCase):
             self.assertEqual(request.url.params['latitude'], '59.33')
             self.assertEqual(request.url.params['longitude'], '18.07')
             return httpx.Response(200, json={
-                'current': {'temperature_2m': 11.6, 'apparent_temperature': 9.2, 'weather_code': 61, 'wind_speed_10m': 14.4},
+                'current': {'temperature_2m': 11.6, 'apparent_temperature': 9.2, 'weather_code': 61, 'wind_speed_10m': 14.4, 'is_day': 1},
                 'daily': {'time': ['2026-11-03', '2026-11-04', '2026-11-05'], 'weather_code': [61, 3, 0],
                           'temperature_2m_max': [12.4, 9.0, 7.5], 'temperature_2m_min': [6.1, 4.0, 1.2]}})
         async def run():
@@ -21,13 +21,15 @@ class WeatherTests(unittest.TestCase):
     def test_current_and_forecast(self):
         result = self.poll()
         self.assertEqual(result.summary, 'Light rain')
-        self.assertEqual([m['value'] for m in result.metrics], ['12', '9', '14'])
+        self.assertEqual([m['value'] for m in result.metrics], ['9', '14'])
+        self.assertEqual(result.details['hero'], {'icon': 'cloud-rain', 'title': '12°C', 'text': 'Light rain', 'place': ''})
+        self.assertEqual([x['icon'] for x in result.details['sections']], ['cloud-rain', 'cloud', 'sun'])
         self.assertEqual([s['heading'] for s in result.details['sections']], ['Today', 'Tomorrow', '2026-11-05'])
         self.assertEqual(result.details['sections'][0]['metrics'][1]['value'], '12° / 6°')
 
     def test_validation(self):
         w = REGISTRY['weather']
-        self.assertEqual(w.validate({'latitude': '59.330', 'longitude': '18.07'}), {'latitude': '59.33', 'longitude': '18.07'})
+        self.assertEqual(w.validate({'latitude': '59.330', 'longitude': '18.07', 'place': ' Stockholm '}), {'latitude': '59.33', 'longitude': '18.07', 'place': 'Stockholm'})
         for bad in ({'latitude': '91', 'longitude': '0'}, {'latitude': 'x', 'longitude': '0'}, {}):
             with self.assertRaises(ValueError):
                 w.validate(bad)
@@ -35,6 +37,22 @@ class WeatherTests(unittest.TestCase):
     def test_header_placement_in_manifest(self):
         self.assertEqual({p['id']: p['placement'] for p in manifest()}['weather'], 'header')
         self.assertEqual({p['id']: p['placement'] for p in manifest()}['http'], 'card')
+
+    def test_night_icons(self):
+        from connectors.weather import condition
+        self.assertEqual(condition(0, True), ('Clear', 'moon'))
+        self.assertEqual(condition(61, True)[1], 'cloud-rain')
+
+    def test_city_search(self):
+        from connectors.weather import search_cities
+        def handler(request):
+            self.assertEqual(request.url.host, 'geocoding-api.open-meteo.com')
+            self.assertEqual(request.url.params['name'], 'Stock holm')
+            return httpx.Response(200, json={'results': [{'name': 'Stockholm', 'admin1': 'Stockholm', 'country': 'Sweden', 'latitude': 59.32938, 'longitude': 18.06871}]})
+        async def run():
+            async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+                return await search_cities(client, 'Stock holm')
+        self.assertEqual(asyncio.run(run()), [{'place': 'Stockholm, Sweden', 'latitude': '59.3294', 'longitude': '18.0687'}])
 
 
 if __name__ == '__main__':

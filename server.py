@@ -18,7 +18,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 
 from authlib.integrations.starlette_client import OAuth
-from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi import FastAPI, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from urllib.parse import urlsplit
@@ -770,6 +770,15 @@ def status(user=Depends(current)):
         value['stale']=bool(value['last_success'] and (value['status']=='unavailable' or now-value['last_success']>row['interval']*2))
         result[row['id']]=value
     return result
+
+@app.get('/api/geocode')
+async def geocode(q:str=Query(min_length=2,max_length=80),user=Depends(current)):
+    from connectors.weather import search_cities
+    try:
+        async with connector_client(trusted_pem()) as http:
+            return await search_cities(http,q.strip())
+    except Exception:
+        raise HTTPException(502,'City search failed. Enter coordinates manually.')
 
 @app.post('/api/connections/{ident}/test')
 async def test_connection(ident:str,user=Depends(current)):

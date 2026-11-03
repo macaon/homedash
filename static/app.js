@@ -100,7 +100,7 @@ function placeDetails(){
  if(widget){
   trigger=anchor=document.querySelector(`[data-widget="${widget.id}"]`);
   if(!anchor)return;
-  [title,sub,connectionId,extra]=[widget.name,'Live details',widget.id,'<div class="widget-actions"><button id="widget-edit">Edit</button><button class="danger" id="widget-remove">Remove</button></div>'];
+  [title,sub,connectionId,extra]=[widget.name,widget.config.place||'Live details',widget.id,'<div class="widget-actions"><button id="widget-edit">Edit</button><button class="danger" id="widget-remove">Remove</button></div>'];
   $('widgets').insertAdjacentHTML('afterend',liveDetails(title,sub,connectionId,extra));
   $('widget-edit').onclick=()=>widgetEditor(widget);
   $('widget-remove').onclick=()=>confirmRemove(`Remove ${widget.name} from your dashboard?`,async()=>{await api('/api/connections/'+widget.id,'DELETE');expandedWidget=null;await load();});
@@ -119,13 +119,20 @@ function renderWidgets(){
  const items=catalog.connections.filter(c=>plugins.find(p=>p.id===c.kind)?.placement==='header');
  if(!items.some(c=>c.id===expandedWidget))expandedWidget=null;
  $('widgets').hidden=!items.length;
- $('widgets').innerHTML=items.map(c=>`<button class="widget-chip" data-widget="${c.id}" aria-expanded="false" aria-controls="service-live-details"><span class="chip-name">${esc(c.name)}</span><span class="chip-text"></span></button>`).join('');
+ $('widgets').innerHTML=items.map(c=>`<button class="widget-chip" data-widget="${c.id}" aria-expanded="false" aria-controls="service-live-details"><span class="chip-icon"></span><span class="chip-name">${esc(c.name)}</span><span class="chip-text"></span></button>`).join('');
  $('widgets').querySelectorAll('[data-widget]').forEach(chip=>chip.onclick=()=>{expandedWidget=expandedWidget===chip.dataset.widget?null:chip.dataset.widget;expandedCard=null;placeDetails();renderStatus();});
 }
 function widgetEditor(connection){
  const kinds=plugins.filter(p=>p.placement==='header');
  editor(connection?'Edit widget':'Add widget',`<label>Name<input id="f-name" required maxlength="80" value="${esc(connection?.name)}" placeholder="Home"></label><label>Type<select id="f-kind">${kinds.map(p=>`<option value="${p.id}" ${p.id===connection?.kind?'selected':''}>${esc(p.name)}</option>`).join('')}</select></label><div id="f-check-fields"></div>`,()=>api('/api/connections'+(connection?'/'+connection.id:''),connection?'PUT':'POST',readCheck($('f-kind').value,$('f-name').value)));
- const fields=()=>{$('f-check-fields').innerHTML=checkFields(connection,$('f-kind').value,kinds.find(p=>p.id===$('f-kind').value).default_url);};
+ const fields=()=>{const plugin=kinds.find(p=>p.id===$('f-kind').value);
+  $('f-check-fields').innerHTML=(plugin.fields.some(f=>f.key==='latitude')?'<label>Find a city<div class="city-search"><input id="f-city" maxlength="80" placeholder="Stockholm" autocomplete="off"><button type="button" id="f-city-go">Search</button></div></label><div id="f-city-results" class="city-results" role="list"></div>':'')+checkFields(connection,plugin.id,plugin.default_url);
+  const go=$('f-city-go');if(!go)return;
+  const search=async()=>{const q=$('f-city').value.trim();if(q.length<2)return;go.disabled=true;$('f-city-results').textContent='Searching…';
+   try{const found=await api('/api/geocode?q='+encodeURIComponent(q));$('f-city-results').innerHTML=found.length?found.map((r,i)=>`<button type="button" role="listitem" data-city="${i}">${icon('map-pin')}${esc(r.place)}</button>`).join(''):'<p class="mini">No matching cities.</p>';
+    $('f-city-results').onclick=e=>{const r=found[e.target.closest('[data-city]')?.dataset.city];if(!r)return;$('config-latitude').value=r.latitude;$('config-longitude').value=r.longitude;$('config-place').value=r.place;if(!$('f-name').value)$('f-name').value=r.place.split(',')[0];$('f-city-results').innerHTML=`<p class="mini">Selected ${esc(r.place)}</p>`;};
+   }catch(error){$('f-city-results').textContent=error.message;}finally{go.disabled=false;}};
+  go.onclick=search;$('f-city').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();search();}};};
  $('f-kind').onchange=fields;fields();
 }
 window.addEventListener('resize',()=>{placeDetails();renderStatus();});
@@ -141,7 +148,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){const menu=document
 function checkFields(connection,kind,defaultURL=''){
  const plugin=plugins.find(p=>p.id===kind);if(!plugin)return '';
  const same=connection?.kind===kind;
- return `<p class="mini connector-description">${esc(plugin.description)}</p><label>${kind==='ping'?'Hostname or IP address':kind==='http'?'Check URL':'API URL'}<input id="f-base" type="${kind==='ping'?'text':'url'}" required maxlength="2048" value="${esc(same?connection.base_url:defaultURL)}" placeholder="${kind==='ping'?'server.example.net or 192.0.2.10':'https://service.example.net'}"></label>${plugin.fields.map(f=>`<label>${esc(f.label)}<input id="config-${f.key}" maxlength="2048" required value="${esc(same?connection.config[f.key]:'')}" placeholder="${esc(f.placeholder)}"><small>${esc(f.help)}</small></label>`).join('')}${plugin.secret_label?`<label>${esc(plugin.secret_label)}<input id="f-secret" type="password" maxlength="8192" autocomplete="new-password" ${same&&connection.secret_configured?'':'required'} placeholder="${same&&connection.secret_configured?'••••••••••••':''}"><small>${same&&connection.secret_configured?'Token saved. Leave blank to keep it.':'Stored encrypted; never returned to the browser.'}</small></label>`:''}<details class="help check-advanced"><summary>Refresh interval</summary><label>Refresh interval <small>seconds, 15–3600</small><input id="f-interval" type="number" min="15" max="3600" required value="${same?connection.interval:60}"></label></details>`;
+ return `<p class="mini connector-description">${esc(plugin.description)}</p><label>${kind==='ping'?'Hostname or IP address':kind==='http'?'Check URL':'API URL'}<input id="f-base" type="${kind==='ping'?'text':'url'}" required maxlength="2048" value="${esc(same?connection.base_url:defaultURL)}" placeholder="${kind==='ping'?'server.example.net or 192.0.2.10':'https://service.example.net'}"></label>${plugin.fields.map(f=>`<label>${esc(f.label)}<input id="config-${f.key}" maxlength="2048" ${f.optional?'':'required'} value="${esc(same?connection.config[f.key]:'')}" placeholder="${esc(f.placeholder)}"><small>${esc(f.help)}</small></label>`).join('')}${plugin.secret_label?`<label>${esc(plugin.secret_label)}<input id="f-secret" type="password" maxlength="8192" autocomplete="new-password" ${same&&connection.secret_configured?'':'required'} placeholder="${same&&connection.secret_configured?'••••••••••••':''}"><small>${same&&connection.secret_configured?'Token saved. Leave blank to keep it.':'Stored encrypted; never returned to the browser.'}</small></label>`:''}<details class="help check-advanced"><summary>Refresh interval</summary><label>Refresh interval <small>seconds, 15–3600</small><input id="f-interval" type="number" min="15" max="3600" required value="${same?connection.interval:60}"></label></details>`;
 }
 function readCheck(kind,name){const plugin=plugins.find(p=>p.id===kind);return {name,kind,base_url:$('f-base').value,config:Object.fromEntries(plugin.fields.map(f=>[f.key,$('config-'+f.key).value])),secret:$('f-secret')?.value||'',interval:Number($('f-interval').value)};}
 async function cardEditor(card){
@@ -175,8 +182,9 @@ $('manage-groups').onclick=()=>{renderGroups();$('groups').showModal();};$('add-
 function age(timestamp){if(!timestamp)return 'Never';const seconds=Math.max(0,Math.floor(Date.now()/1000-timestamp));return seconds<60?'just now':seconds<3600?`${Math.floor(seconds/60)}m ago`:`${Math.floor(seconds/3600)}h ago`;}
 const activityDisclosures=new Set();
 document.addEventListener('toggle',event=>{const disclosure=event.target;if(!disclosure.matches?.('.activity-more')||!disclosure.isConnected)return;const id=disclosure.closest('[data-status]')?.dataset.status;if(id){if(disclosure.open)activityDisclosures.add(id);else activityDisclosures.delete(id);}},true);
+function heroMarkup(hero){return hero?`<div class="hero"><span class="hero-icon">${icon(hero.icon)}</span><div><div class="hero-title">${esc(hero.title)}</div><div class="hero-text">${esc(hero.text)}${hero.place?` · ${esc(hero.place)}`:''}</div></div></div>`:'';}
 function activityMarkup(details, expanded=false){
- if(Array.isArray(details?.sections))return details.sections.length?details.sections.map(section=>`<section class="activity-section" aria-label="${esc(section.heading)}"><h4>${esc(section.heading)}</h4><div class="printer-metrics">${(section.metrics||[]).map(metric=>`<div><span class="metric-label">${esc(metric.label)}</span><span class="metric-value">${esc(metric.value)}</span></div>`).join('')}</div></section>`).join(''):`<p class="activity-empty">${esc(details.empty||'No data available.')}</p>`;
+ if(Array.isArray(details?.sections))return details.sections.length?`<div class="${details.sections.some(s=>s.icon)?'forecast':'activity-sections'}">${details.sections.map(section=>`<section class="activity-section" aria-label="${esc(section.heading)}">${section.icon?`<span class="section-icon">${icon(section.icon)}</span>`:''}<h4>${esc(section.heading)}</h4><div class="printer-metrics">${(section.metrics||[]).map(metric=>`<div><span class="metric-label">${esc(metric.label)}</span><span class="metric-value">${esc(metric.value)}</span></div>`).join('')}</div></section>`).join('')}</div>`:`<p class="activity-empty">${esc(details.empty||'No data available.')}</p>`;
  if(!details?.heading)return '';
  const rows=details.items||[];
  const rowMarkup=row=>{const progress=Number(row.progress),hasProgress=row.progress!=null&&Number.isFinite(progress),percent=Math.min(100,Math.max(0,progress)),minutes=Number(row.remaining_minutes),remaining=Number.isFinite(minutes)&&minutes>=0?(minutes>=60?`${Math.floor(minutes/60)}h ${minutes%60}m`:`${minutes}m`):'';
@@ -190,11 +198,12 @@ function renderStatus(){document.querySelectorAll('[data-status]').forEach(el=>{
  if(el.hasAttribute('data-compact')){el.innerHTML=`<span class="status-dot ${esc(value.status)}" role="img" tabindex="0" aria-label="${esc(detail)}" title="${esc(detail)}"></span>`;return;}
  const activityExpanded=el.querySelector('.activity-more')?.open||activityDisclosures.has(el.dataset.status);
  const restoreDisclosureFocus=el.querySelector('.activity-more>summary')===document.activeElement;
- el.innerHTML=`<p class="status-line" title="${esc(value.summary)}"><span class="status-dot ${esc(value.status)}"></span>${label}${value.stale?' · stale data':''}</p>${value.status==='unavailable'?`<p class="status-error">${esc(value.summary)}</p>`:''}<div class="metrics${value.metrics?.length===3?' metrics-three':''}">${(value.metrics||[]).map(m=>`<div><span class="metric-label">${esc(m.label)}</span><span class="metric-value">${esc(m.value)}${m.unit?`<small>${esc(m.unit)}</small>`:''}</span></div>`).join('')}</div>${activityMarkup(value.details,activityExpanded)}${value.checked_at?`<p class="status-age">Checked ${age(value.checked_at)}${value.stale?` · last data ${age(value.last_success)}`:''}</p>`:''}`;
+ el.innerHTML=`<p class="status-line" title="${esc(value.summary)}"><span class="status-dot ${esc(value.status)}"></span>${label}${value.stale?' · stale data':''}</p>${heroMarkup(value.details?.hero)}${value.status==='unavailable'?`<p class="status-error">${esc(value.summary)}</p>`:''}<div class="metrics${value.metrics?.length===3?' metrics-three':''}">${(value.metrics||[]).map(m=>`<div><span class="metric-label">${esc(m.label)}</span><span class="metric-value">${esc(m.value)}${m.unit?`<small>${esc(m.unit)}</small>`:''}</span></div>`).join('')}</div>${activityMarkup(value.details,activityExpanded)}${value.checked_at?`<p class="status-age">Checked ${age(value.checked_at)}${value.stale?` · last data ${age(value.last_success)}`:''}</p>`:''}`;
  if(restoreDisclosureFocus)el.querySelector('.activity-more>summary')?.focus({preventScroll:true});
 });
- document.querySelectorAll('[data-widget]').forEach(chip=>{const v=snapshots[chip.dataset.widget],m=v?.metrics?.[0];
-  chip.querySelector('.chip-text').textContent=!v?.checked_at?'Loading…':v.status==='unavailable'?'Unavailable':[m&&m.value+(m.unit||''),v.summary].filter(Boolean).join(' · ');});}
+ document.querySelectorAll('[data-widget]').forEach(chip=>{const v=snapshots[chip.dataset.widget],hero=v?.details?.hero;
+  chip.querySelector('.chip-icon').innerHTML=hero&&v.status!=='unavailable'?icon(hero.icon):'';
+  chip.querySelector('.chip-text').textContent=!v?.checked_at?'Loading…':v.status==='unavailable'?'Unavailable':[hero?.title,v.summary].filter(Boolean).join(' · ');});}
 let refreshing=false;
 async function refreshStatus(){if(!state?.logged_in||refreshing)return;refreshing=true;try{snapshots=await api('/api/status');renderStatus();$('sync-state').textContent='Status synced '+age(Date.now()/1000);}catch(e){$('sync-state').textContent='Status refresh failed · retrying automatically';}finally{refreshing=false;}}
 $('refresh').onclick=()=>refreshStatus();
