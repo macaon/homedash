@@ -37,7 +37,7 @@ async function init() {
   }
   $('account-btn').textContent=state.user.username+' ▾';$('account-name').textContent=state.user.admin?'Administrator':'Account';
   $('password-btn').hidden=!state.user.local;$('users-btn').hidden=!state.user.admin;
-  plugins=await api('/api/plugins');await load();await refreshStatus();
+  plugins=await api('/api/plugins');$('add-widget').hidden=!plugins.some(p=>p.placement==='header');await load();await refreshStatus();
 }
 $('auth-form').onsubmit=async e=>{e.preventDefault();$('auth-error').textContent='';if(state.setup_needed&&$('login-password').value!==$('login-repeat').value){$('auth-error').textContent='Passwords do not match.';return;}const button=$('login-btn');button.disabled=true;try{await api(state.setup_needed?'/api/setup':'/api/login','POST',{username:$('login-user').value,password:$('login-password').value});$('auth-form').reset();await init();}catch(error){$('auth-error').textContent=error.message;}finally{button.disabled=false;}};
 $('logout-btn').onclick=async()=>{try{await api('/api/logout','POST');await init();}catch(e){toast(e.message,true);}};
@@ -68,14 +68,14 @@ function iconName(name){return ICON_ALIASES[name]||name||'layout-grid';}
 function icon(name){const key=iconName(name);return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="/static/lucide/sprite.svg?v=1.64.0#${esc(key)}"></use></svg>`;}
 function host(url){try{return new URL(url).host;}catch{return url;}}
 async function load(){catalog=await api('/api/catalog');render();if($('groups').open)renderGroups();}
-let expandedCard=null;
+let expandedWidget=null,expandedCard=null;
 function cardMarkup(card){return `<article class="card service-card" draggable="true" data-card="${card.id}"><div class="card-top"><div class="service-icon">${icon(card.icon)}</div><div class="service-copy"><h3>${esc(card.name)}</h3>${card.description?`<p class="service-description">${esc(card.description)}</p>`:''}</div><details class="service-menu"><summary aria-label="Manage ${esc(card.name)}" title="Manage service">⋯</summary><div class="service-menu-items"><button data-edit="${card.id}">Edit</button><button data-move="${card.id}">Move…</button><button class="danger" data-delete="${card.id}">Remove</button></div></details></div><div class="card-bottom"><span class="service-location">${card.connection_id?`<span class="availability" data-status="${card.connection_id}" data-compact></span>`:''}</span>${card.connection_id?`<button class="service-expand" data-expand="${card.id}" aria-expanded="${expandedCard===card.id}" aria-controls="service-live-details" aria-label="Live details for ${esc(card.name)}" title="Show or hide live details"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>`:''}<a class="open-link" href="${esc(card.url)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${esc(card.name)}">Open ↗</a></div></article>`;}
 function render(){
  const query=$('search').value.trim().toLowerCase();
  const visible=catalog.cards.filter(card=>(card.name+' '+card.description+' '+card.url).toLowerCase().includes(query));
  const groups=[...catalog.groups,{id:null,name:catalog.groups.length?'Ungrouped':'Services'}];
  $('dashboard').innerHTML=groups.map(group=>{const cards=visible.filter(c=>c.group_id===group.id);return cards.length?`<section class="service-group"><div class="group-head"><h2>${esc(group.name)}</h2><span class="group-count">${cards.length}</span></div><div class="cards">${cards.map(cardMarkup).join('')}</div></section>`:'';}).join('')||`<div class="card blank"><h3>${query?'No matching services':'A home for your homelab'}</h3><p class="muted">${query?'Try a different name or hostname.':'Add your first service to bring your homelab together. Start with a browser link, then add live status whenever you need it.'}</p>${query?'':'<button class="primary" id="first-card">+ Add your first service</button>'}</div>`;
- document.querySelectorAll('[data-expand]').forEach(button=>button.onclick=()=>{expandedCard=expandedCard===button.dataset.expand?null:button.dataset.expand;placeDetails();renderStatus();});
+ document.querySelectorAll('[data-expand]').forEach(button=>button.onclick=()=>{expandedCard=expandedCard===button.dataset.expand?null:button.dataset.expand;expandedWidget=null;placeDetails();renderStatus();});
  $('first-card')?.addEventListener('click',()=>cardEditor());
  document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>cardEditor(catalog.cards.find(c=>c.id===b.dataset.edit)));
  document.querySelectorAll('[data-delete]').forEach(b=>b.onclick=()=>{const card=catalog.cards.find(c=>c.id===b.dataset.delete);confirmRemove(`Remove ${card.name} from your dashboard?`,async()=>{await api('/api/cards/'+card.id,'DELETE');await load();});});
@@ -88,18 +88,45 @@ function render(){
   el.addEventListener('dragleave',()=>el.classList.remove('drop-target'));
   el.addEventListener('drop',e=>{e.preventDefault();el.classList.remove('drop-target');if(dragged)reorderCards(dragged,el.dataset.card);});
  });
- placeDetails();renderStatus();
+ renderWidgets();placeDetails();renderStatus();
 }
+function liveDetails(title,sub,connectionId,extra=''){return `<section class="card service-live-details" id="service-live-details" aria-label="Live details for ${esc(title)}"><div class="details-heading"><h3>${esc(title)} <span>${esc(sub)}</span></h3><button id="close-live-details" aria-label="Close live details">×</button></div><div data-status="${connectionId}"></div>${extra}</section>`;}
 function placeDetails(){
  $('service-live-details')?.remove();
  document.querySelectorAll('[data-expand]').forEach(button=>button.setAttribute('aria-expanded',String(button.dataset.expand===expandedCard)));
- const selected=[...document.querySelectorAll('[data-card]')].find(el=>el.dataset.card===expandedCard);
- const card=catalog.cards.find(c=>c.id===expandedCard);
- if(!selected||!card?.connection_id)return;
- const row=[...selected.parentElement.children].filter(el=>Math.abs(el.getBoundingClientRect().top-selected.getBoundingClientRect().top)<2);
- row[row.length-1].insertAdjacentHTML('afterend',`<section class="card service-live-details" id="service-live-details" aria-label="Live details for ${esc(card.name)}"><div class="details-heading"><h3>${esc(card.name)} <span>Live details · ${esc(host(card.url))}</span></h3><button id="close-live-details" aria-label="Close live details">×</button></div><div data-status="${card.connection_id}"></div></section>`);
- const panel=$('service-live-details');panel.style.setProperty('--pointer-x',`${selected.getBoundingClientRect().left+selected.getBoundingClientRect().width/2-panel.getBoundingClientRect().left}px`);
- $('close-live-details').onclick=()=>{const button=selected.querySelector('[data-expand]');expandedCard=null;placeDetails();button?.focus();};
+ document.querySelectorAll('[data-widget]').forEach(chip=>chip.setAttribute('aria-expanded',String(chip.dataset.widget===expandedWidget)));
+ let trigger,anchor,title,sub,connectionId,extra='';
+ const widget=catalog.connections.find(c=>c.id===expandedWidget);
+ if(widget){
+  trigger=anchor=document.querySelector(`[data-widget="${widget.id}"]`);
+  if(!anchor)return;
+  [title,sub,connectionId,extra]=[widget.name,'Live details',widget.id,'<div class="widget-actions"><button id="widget-edit">Edit</button><button class="danger" id="widget-remove">Remove</button></div>'];
+  $('widgets').insertAdjacentHTML('afterend',liveDetails(title,sub,connectionId,extra));
+  $('widget-edit').onclick=()=>widgetEditor(widget);
+  $('widget-remove').onclick=()=>confirmRemove(`Remove ${widget.name} from your dashboard?`,async()=>{await api('/api/connections/'+widget.id,'DELETE');expandedWidget=null;await load();});
+ }else{
+  const selected=[...document.querySelectorAll('[data-card]')].find(el=>el.dataset.card===expandedCard);
+  const card=catalog.cards.find(c=>c.id===expandedCard);
+  if(!selected||!card?.connection_id)return;
+  trigger=selected.querySelector('[data-expand]');anchor=selected;
+  const row=[...selected.parentElement.children].filter(el=>Math.abs(el.getBoundingClientRect().top-selected.getBoundingClientRect().top)<2);
+  row[row.length-1].insertAdjacentHTML('afterend',liveDetails(card.name,`Live details · ${host(card.url)}`,card.connection_id));
+ }
+ const panel=$('service-live-details'),box=anchor.getBoundingClientRect();panel.style.setProperty('--pointer-x',`${box.left+box.width/2-panel.getBoundingClientRect().left}px`);
+ $('close-live-details').onclick=()=>{expandedCard=expandedWidget=null;placeDetails();trigger?.focus();};
+}
+function renderWidgets(){
+ const items=catalog.connections.filter(c=>plugins.find(p=>p.id===c.kind)?.placement==='header');
+ if(!items.some(c=>c.id===expandedWidget))expandedWidget=null;
+ $('widgets').hidden=!items.length;
+ $('widgets').innerHTML=items.map(c=>`<button class="widget-chip" data-widget="${c.id}" aria-expanded="false" aria-controls="service-live-details"><span class="chip-name">${esc(c.name)}</span><span class="chip-text"></span></button>`).join('');
+ $('widgets').querySelectorAll('[data-widget]').forEach(chip=>chip.onclick=()=>{expandedWidget=expandedWidget===chip.dataset.widget?null:chip.dataset.widget;expandedCard=null;placeDetails();renderStatus();});
+}
+function widgetEditor(connection){
+ const kinds=plugins.filter(p=>p.placement==='header');
+ editor(connection?'Edit widget':'Add widget',`<label>Name<input id="f-name" required maxlength="80" value="${esc(connection?.name)}" placeholder="Home"></label><label>Type<select id="f-kind">${kinds.map(p=>`<option value="${p.id}" ${p.id===connection?.kind?'selected':''}>${esc(p.name)}</option>`).join('')}</select></label><div id="f-check-fields"></div>`,()=>api('/api/connections'+(connection?'/'+connection.id:''),connection?'PUT':'POST',readCheck($('f-kind').value,$('f-name').value)));
+ const fields=()=>{$('f-check-fields').innerHTML=checkFields(connection,$('f-kind').value,kinds.find(p=>p.id===$('f-kind').value).default_url);};
+ $('f-kind').onchange=fields;fields();
 }
 window.addEventListener('resize',()=>{placeDetails();renderStatus();});
 async function reorderCards(source,target){const a=catalog.cards.find(c=>c.id===source),b=catalog.cards.find(c=>c.id===target);if(!a||!b||a.group_id!==b.group_id||source===target)return;const ids=catalog.cards.map(c=>c.id);ids.splice(ids.indexOf(source),1);ids.splice(ids.indexOf(target),0,source);try{await api('/api/order/cards','PUT',{ids});await load();}catch(e){toast(e.message,true);}}
@@ -120,7 +147,7 @@ function readCheck(kind,name){const plugin=plugins.find(p=>p.id===kind);return {
 async function cardEditor(card){
  try{iconCatalog??=await api('/static/lucide/catalog.json?v=1.64.0');}catch(error){toast('Could not load the icon catalog. Please try again.',true);return;}
  let selectedIcon=iconName(card?.icon||'grid');const connection=catalog.connections.find(c=>c.id===card?.connection_id);
- editor(card?'Edit service':'Add service',`${card?'':'<p class="mini">Add a service link, with an optional online check or live metrics.</p>'}<label>Name<input id="f-name" required maxlength="80" value="${esc(card?.name)}" placeholder="Proxmox"></label><label>URL<input id="f-url" type="url" required maxlength="2048" value="${esc(card?.url)}" placeholder="https://server.example.net"></label><label>Description <small>optional</small><textarea id="f-description" rows="2" maxlength="1000">${esc(card?.description)}</textarea></label><label>Group<select id="f-group"><option value="">Ungrouped</option>${catalog.groups.map(g=>`<option value="${g.id}" ${g.id===card?.group_id?'selected':''}>${esc(g.name)}</option>`).join('')}</select></label><div class="icon-picker"><label>Icon</label><div class="icon-choices icon-defaults" id="icon-defaults" role="group" aria-label="Common icons"></div><details class="icon-browser"><summary aria-label="Browse all Lucide icons" title="Browse all Lucide icons"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><label>Find an icon<input id="icon-search" type="search" autocomplete="off" placeholder="Search names or keywords, e.g. server, music, shield"></label><p id="icon-results" class="mini" role="status" aria-live="polite"></p><div class="icon-choices" id="icon-results-grid" role="group" aria-label="Lucide icons"></div><button type="button" id="icon-more" class="icon-more">Show more icons</button><p class="mini icon-credit">Lucide · ${iconCatalog.icons.length.toLocaleString()} icons · bundled locally</p></details></div><div class="service-check"><label>Integration<select id="f-kind"><option value="">None · link only</option>${plugins.map(p=>`<option value="${p.id}" ${p.id===connection?.kind?'selected':''}>${esc(p.name)}</option>`).join('')}</select></label><label id="check-choice-row" hidden>Connection<select id="f-check-choice"></select></label><div id="f-check-fields"></div></div>`,async()=>{const kind=$('f-kind').value;await api('/api/cards'+(card?'/'+card.id:''),card?'PUT':'POST',{name:$('f-name').value,url:$('f-url').value,description:$('f-description').value,group_id:$('f-group').value||null,icon:selectedIcon,connection_id:kind?$('f-check-choice').value||null:null,connection:kind&&!$('f-check-choice').value?readCheck(kind,$('f-name').value):null});await refreshStatus();});
+ editor(card?'Edit service':'Add service',`${card?'':'<p class="mini">Add a service link, with an optional online check or live metrics.</p>'}<label>Name<input id="f-name" required maxlength="80" value="${esc(card?.name)}" placeholder="Proxmox"></label><label>URL<input id="f-url" type="url" required maxlength="2048" value="${esc(card?.url)}" placeholder="https://server.example.net"></label><label>Description <small>optional</small><textarea id="f-description" rows="2" maxlength="1000">${esc(card?.description)}</textarea></label><label>Group<select id="f-group"><option value="">Ungrouped</option>${catalog.groups.map(g=>`<option value="${g.id}" ${g.id===card?.group_id?'selected':''}>${esc(g.name)}</option>`).join('')}</select></label><div class="icon-picker"><label>Icon</label><div class="icon-choices icon-defaults" id="icon-defaults" role="group" aria-label="Common icons"></div><details class="icon-browser"><summary aria-label="Browse all Lucide icons" title="Browse all Lucide icons"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><label>Find an icon<input id="icon-search" type="search" autocomplete="off" placeholder="Search names or keywords, e.g. server, music, shield"></label><p id="icon-results" class="mini" role="status" aria-live="polite"></p><div class="icon-choices" id="icon-results-grid" role="group" aria-label="Lucide icons"></div><button type="button" id="icon-more" class="icon-more">Show more icons</button><p class="mini icon-credit">Lucide · ${iconCatalog.icons.length.toLocaleString()} icons · bundled locally</p></details></div><div class="service-check"><label>Integration<select id="f-kind"><option value="">None · link only</option>${plugins.filter(p=>p.placement!=='header').map(p=>`<option value="${p.id}" ${p.id===connection?.kind?'selected':''}>${esc(p.name)}</option>`).join('')}</select></label><label id="check-choice-row" hidden>Connection<select id="f-check-choice"></select></label><div id="f-check-fields"></div></div>`,async()=>{const kind=$('f-kind').value;await api('/api/cards'+(card?'/'+card.id:''),card?'PUT':'POST',{name:$('f-name').value,url:$('f-url').value,description:$('f-description').value,group_id:$('f-group').value||null,icon:selectedIcon,connection_id:kind?$('f-check-choice').value||null:null,connection:kind&&!$('f-check-choice').value?readCheck(kind,$('f-name').value):null});await refreshStatus();});
  const targetFromURL=()=>{let url=$('f-url').value.split('#')[0];if($('f-kind').value!=='http'){try{url=$('f-kind').value==='ping'?new URL(url).hostname.replace(/^\[|\]$/g,''):new URL(url).origin;}catch{}}return url;};
  const fields=()=>{const kind=$('f-kind').value;const existing=catalog.connections.find(c=>c.id===$('f-check-choice').value&&c.kind===kind);if(existing){const plugin=plugins.find(p=>p.id===kind);const uses=catalog.cards.filter(c=>c.connection_id===existing.id).length;$('f-check-fields').innerHTML=`<div class="saved-check"><p class="mini">Reuse this connection and its latest results. Settings are read-only here; choose New connection for a separate configuration.</p><dl><dt>Target</dt><dd>${esc(existing.base_url)}</dd><dt>Interval</dt><dd>${existing.interval} seconds</dd>${(plugin?.fields||[]).map(f=>`<dt>${esc(f.label)}</dt><dd>${esc(existing.config[f.key])}</dd>`).join('')}${plugin?.secret_label?`<dt>Credentials</dt><dd>${existing.secret_configured?'Configured':'Not configured'}</dd>`:''}<dt>Used by</dt><dd>${uses} service${uses===1?'':'s'}</dd></dl></div>`;return;}$('f-check-fields').innerHTML=checkFields(null,kind,targetFromURL());};
  const choices=(selected='')=>{const kind=$('f-kind').value;$('check-choice-row').hidden=!kind;$('f-check-choice').innerHTML='<option value="">New connection</option>'+catalog.connections.filter(c=>c.kind===kind).map(c=>`<option value="${c.id}" ${c.id===selected?'selected':''}>${esc(c.name)} · ${esc(kind==='ping'?c.base_url:host(c.base_url))}</option>`).join('');fields();};
@@ -136,6 +163,7 @@ async function cardEditor(card){
  $('icon-more').onclick=()=>{iconLimit+=80;drawIcons();};drawIcons();
 }
 $('add-card').onclick=()=>cardEditor();
+$('add-widget').onclick=()=>widgetEditor();
 function renderGroups(){
  $('group-list').innerHTML=catalog.groups.length?catalog.groups.map((g,i)=>`<div class="row-item"><div class="main"><span class="title">${esc(g.name)}</span><span class="sub">${catalog.cards.filter(c=>c.group_id===g.id).length} services</span></div><button class="ghost" data-group-up="${g.id}" aria-label="Move ${esc(g.name)} earlier" ${i===0?'disabled':''}>↑</button><button class="ghost" data-group-down="${g.id}" aria-label="Move ${esc(g.name)} later" ${i===catalog.groups.length-1?'disabled':''}>↓</button><button class="ghost" data-group-edit="${g.id}">Edit</button><button class="ghost danger" data-group-delete="${g.id}">Remove</button></div>`).join(''):'<p class="mini">No groups yet. Cards are shown together until you add one.</p>';
  for(const direction of ['up','down'])document.querySelectorAll(`[data-group-${direction}]`).forEach(b=>b.onclick=async()=>{const ids=catalog.groups.map(g=>g.id),at=ids.indexOf(b.dataset[direction==='up'?'groupUp':'groupDown']),next=at+(direction==='up'?-1:1);[ids[at],ids[next]]=[ids[next],ids[at]];try{await api('/api/order/groups','PUT',{ids});await load();}catch(e){toast(e.message,true);}});
@@ -164,7 +192,9 @@ function renderStatus(){document.querySelectorAll('[data-status]').forEach(el=>{
  const restoreDisclosureFocus=el.querySelector('.activity-more>summary')===document.activeElement;
  el.innerHTML=`<p class="status-line" title="${esc(value.summary)}"><span class="status-dot ${esc(value.status)}"></span>${label}${value.stale?' · stale data':''}</p>${value.status==='unavailable'?`<p class="status-error">${esc(value.summary)}</p>`:''}<div class="metrics${value.metrics?.length===3?' metrics-three':''}">${(value.metrics||[]).map(m=>`<div><span class="metric-label">${esc(m.label)}</span><span class="metric-value">${esc(m.value)}${m.unit?`<small>${esc(m.unit)}</small>`:''}</span></div>`).join('')}</div>${activityMarkup(value.details,activityExpanded)}${value.checked_at?`<p class="status-age">Checked ${age(value.checked_at)}${value.stale?` · last data ${age(value.last_success)}`:''}</p>`:''}`;
  if(restoreDisclosureFocus)el.querySelector('.activity-more>summary')?.focus({preventScroll:true});
-});}
+});
+ document.querySelectorAll('[data-widget]').forEach(chip=>{const v=snapshots[chip.dataset.widget],m=v?.metrics?.[0];
+  chip.querySelector('.chip-text').textContent=!v?.checked_at?'Loading…':v.status==='unavailable'?'Unavailable':[m&&m.value+(m.unit||''),v.summary].filter(Boolean).join(' · ');});}
 let refreshing=false;
 async function refreshStatus(){if(!state?.logged_in||refreshing)return;refreshing=true;try{snapshots=await api('/api/status');renderStatus();$('sync-state').textContent='Status synced '+age(Date.now()/1000);}catch(e){$('sync-state').textContent='Status refresh failed · retrying automatically';}finally{refreshing=false;}}
 $('refresh').onclick=()=>refreshStatus();

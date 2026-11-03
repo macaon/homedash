@@ -162,6 +162,12 @@ Choose **HomeCA** under Integration, enter its HTTPS base URL and an API token. 
 
 Details show **Certificates** (active leaves), **Expiring soon** (30 days or less), **Expired** and **Nearest CA expiry**, followed by **Needs attention**: an expired certificate or CA, a CA with fewer than 90 days left, a CA whose revocation list is overdue (HomeCA refreshes lists daily), a certificate you must renew by hand that is about to expire, and an ACME certificate with 7 days or less left (ACME clients renew at two-thirds of a certificate's life, so this means renewal is failing). An ACME certificate still inside its renewal window is not listed. The note says whether ACME is on. Names of certificates appear only in the attention list. A rejected or expired token is shown as unavailable rather than as an empty CA. Nothing is changed.
 
+### Weather
+
+Weather is a header widget rather than a service card. Use **+ Add widget**, choose **Weather**, and enter your latitude and longitude. It shows the current temperature and conditions above the dashboard; click it for feels-like, wind and a three-day forecast.
+
+Data comes from [Open-Meteo](https://open-meteo.com/), which needs no API key. Your coordinates are sent to the API URL (default `https://api.open-meteo.com`), so point it at a self-hosted instance if you prefer. Units are °C and km/h.
+
 ### Private certificate authorities
 
 Administrators manage shared certificate trust under **settings cog → Trust**. Name an upload and select one or several public PEM/DER certificate files; PEM bundles are supported too. Upload a private CA root once and all service checks and OIDC logins can trust certificates signed by it. Duplicate certificates are ignored. The list shows each certificate's subject, expiry and SHA-256 fingerprint, with a removal action.
@@ -192,6 +198,7 @@ Each connector supplies:
 
 - `id`, `name`, `description`, `secret_label` and configuration `fields` for the UI.
 - `validate(config)` returning normalized configuration or raising `ValueError`.
+- Optional `placement = 'header'` to show the connector as a header widget instead of on service cards, and `default_url` to prefill its API URL.
 - Async `poll(client, base_url, config, secret)` returning a `Result(status, summary, metrics, details)`; `details` is optional.
 
 Optional `details` adds an activity section with `heading`, `items`, and optional `empty`/`note` text. Rows support `title`, `subtitle`, `user`, `date`, optional numeric `progress` (0–100), and `remaining_minutes`. These are structured data, never HTML. The core escapes text and retains this section alongside stale metrics.

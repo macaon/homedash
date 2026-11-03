@@ -781,7 +781,8 @@ async def poll_loop():
     while True:
         refresh_connectors()
         with db() as c:
-            rows=[dict(row) for row in c.execute('SELECT * FROM connections WHERE EXISTS (SELECT 1 FROM cards WHERE cards.connection_id=connections.id)')]
+            header=[k for k,p in REGISTRY.items() if getattr(p,'placement','')=='header']
+            rows=[dict(row) for row in c.execute(f'SELECT * FROM connections WHERE EXISTS (SELECT 1 FROM cards WHERE cards.connection_id=connections.id) OR kind IN ({",".join("?"*len(header))})',header)]
         await asyncio.gather(*(poll_connection(row) for row in rows))
         active={row['id'] for row in rows}
         for ident in list(POLL_LOCKS):

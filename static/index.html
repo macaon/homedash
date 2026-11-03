@@ -7,8 +7,9 @@
 <main id="app" hidden>
 <header><div class="logo">HomeDash</div><span class="spacer"></span><button id="users-btn" class="settings-toggle" aria-label="Server settings" title="Server settings" hidden><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.5h5l.6 2.6 1.5.9 2.6-.8 2.5 4.3-2 1.8v1.8l2 1.8-2.5 4.3-2.6-.8-1.5.9-.6 2.6h-5L8.9 19l-1.5-.9-2.6.8-2.5-4.3 2-1.8V11l-2-1.8 2.5-4.3 2.6.8 1.5-.9Z"/><circle cx="12" cy="12" r="3"/></svg></button><button id="account-btn" aria-haspopup="true" aria-expanded="false">Account ▾</button><div id="account-panel" class="menu-panel"><div id="account-name" class="account-name"></div><button id="password-btn">Password</button><button id="logout-btn">Log out</button></div></header>
 <p class="muted intro">Your homelab, at a glance.</p>
+<section id="widgets" class="widgets" aria-label="Live widgets" hidden></section>
 <section id="dashboard-panel">
-<div class="toolbar"><h2>Dashboard</h2><span class="spacer"></span><input id="search" class="search" placeholder="Find a service…" aria-label="Find a service"><button id="manage-groups">Groups</button><button class="primary" id="add-card">+ Add service</button></div>
+<div class="toolbar"><h2>Dashboard</h2><span class="spacer"></span><input id="search" class="search" placeholder="Find a service…" aria-label="Find a service"><button id="manage-groups">Groups</button><button id="add-widget" hidden>+ Add widget</button><button class="primary" id="add-card">+ Add service</button></div>
 <div id="dashboard"></div></section>
 <footer class="page-foot"><span id="sync-state">Live status updates every 15 seconds</span><button class="ghost" id="refresh">Refresh status</button></footer>
 </main>

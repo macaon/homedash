@@ -148,11 +148,12 @@ from .gitea import Gitea
 from .mylar import Mylar
 from .homeca import HomeCA
 from .bookstack import BookStack
+from .weather import Weather
 
-REGISTRY = {plugin.id:plugin for plugin in (HTTP(), Ping(), HomeAssistant(), Proxmox(), Audiobookshelf(), AudioBookRequest(), Bambuddy(), BookStack(), Immich(), Paperless(), Komga(), CalibreWeb(), Gitea(), Mylar(), HomeCA(), HomePod())}
+REGISTRY = {plugin.id:plugin for plugin in (HTTP(), Ping(), HomeAssistant(), Proxmox(), Audiobookshelf(), AudioBookRequest(), Bambuddy(), BookStack(), Immich(), Paperless(), Komga(), CalibreWeb(), Gitea(), Mylar(), HomeCA(), HomePod(), Weather())}
 
 def manifest():
-    return [{'id':p.id,'name':p.name,'description':p.description,'secret_label':p.secret_label,'fields':p.fields} for p in list(REGISTRY.values())]
+    return [{'id':p.id,'name':p.name,'description':p.description,'secret_label':p.secret_label,'fields':p.fields,'placement':getattr(p,'placement','card'),'default_url':getattr(p,'default_url','')} for p in list(REGISTRY.values())]
 
 def validate_url(value):
     parsed=urlsplit(value.strip())
