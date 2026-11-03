@@ -35,3 +35,4 @@
 .city-search{display:flex;gap:8px;margin-top:4px}.city-search input{flex:1;margin:0}.city-results{display:flex;flex-direction:column;gap:4px;margin:0 0 14px}.city-results button{display:flex;align-items:center;gap:8px;text-align:left}.city-results svg{width:16px;height:16px;flex:none;color:var(--muted)}
 @media(max-width:600px){.hero-icon svg{width:56px;height:56px}.hero-title{font-size:36px}}
 .add-menu{position:relative}.add-menu .menu-panel{min-width:170px}.menu-panel hr{width:100%;border:0;border-top:1px solid var(--line);margin:4px 0}
+.strip{margin:0 0 18px}.strip h4{margin:0 0 8px}.strip-items{display:flex;gap:4px;overflow-x:auto;padding-bottom:6px}.strip-item{flex:0 0 60px;display:flex;flex-direction:column;align-items:center;gap:4px}.strip-label{font-size:11px;color:var(--muted)}.strip-icon svg{width:24px;height:24px;color:var(--accent);stroke-width:1.5}.strip-value{font-size:14px;font-weight:650}.strip-sub{font-size:10px;color:var(--muted);min-height:12px}
