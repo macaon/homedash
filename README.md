@@ -274,6 +274,8 @@ The Integration selector identifies a provider using its stable connector ID, in
 
 HomeDash is free software, released under the GNU General Public License, version 3. See [LICENSE](LICENSE).
 
+The bundled icons are from [Lucide](https://lucide.dev), used under the ISC license; its notice is in [static/lucide/LICENSE](static/lucide/LICENSE).
+
 ## AI disclosure
 
 Parts of this project's code, tests and documentation were written with the help of AI coding assistants. A human directs the work and reviews it. Use at your own risk.
