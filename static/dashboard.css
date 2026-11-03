@@ -39,3 +39,5 @@
 .check-group{border:0;margin:0 0 14px;padding:0}.check-group legend{padding:0;margin-bottom:6px}.check-group label.inline{display:flex;align-items:center;gap:8px;margin:0 0 4px}.check-group input{width:auto;margin:0}
 .callout{margin:0 0 14px;padding:10px 12px;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;background:var(--bg);font-size:12px;line-height:1.55}.callout strong{display:block;margin-bottom:2px}
 .activity-lists{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:8px 24px}
+.activity-row.has-mode{display:flex;gap:10px;align-items:flex-start}.activity-mode{flex:none;display:inline-flex;margin-top:2px;color:var(--accent)}.activity-mode svg{width:18px;height:18px}
+.check-row{display:flex;flex-wrap:wrap;gap:4px 18px}.check-row legend{width:100%}.check-row label.inline{margin:0}.check-row small{width:100%}

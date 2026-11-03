@@ -19,7 +19,10 @@ CACHE = {}
 ERRORS = {}
 KINDS = ('departures', 'arrivals')
 SHOW = {'departures': 'Departures', 'arrivals': 'Arrivals', 'next': 'Whichever is next'}
-MODES = {'TRAIN': 'train-front', 'TRAM': 'tram-front', 'METRO': 'train-front-tunnel', 'BOAT': 'ship'}
+# Normalised vehicle kinds: what the type filter offers, and the icon and label each one gets in the lists.
+VEHICLES = {'bus': 'Buses', 'train': 'Trains', 'tram': 'Trams', 'metro': 'Metro', 'boat': 'Boats'}
+ICONS = {'bus': 'bus', 'train': 'train-front', 'tram': 'tram-front', 'metro': 'train-front-tunnel', 'boat': 'ship'}
+LABELS = {'bus': 'Bus', 'train': 'Train', 'tram': 'Tram', 'metro': 'Metro', 'boat': 'Boat'}
 NOTICE = ('Live times come from the transport operators. They are not always available or accurate: many departures show the timetable only, '
           'and live times can be late, early or wrong, in any region. Treat them as a guide, not a guarantee. ')
 
@@ -43,10 +46,17 @@ def headline(line, kind, show, minutes):
 
 
 def row(kind, call, minutes):
+    label = 'Replacement bus' if call['replacement'] else LABELS.get(call['mode'], 'Bus')
     shown = call['scheduled'][11:16] + (f" → {call['realtime'][11:16]}" if call['is_realtime'] and abs(call['delay']) >= 60 else '')
     return {'title': (f"{call['line']} → {call['direction']}" if kind == 'departures' else f"{call['line']} ← {call['origin'] or call['direction']}")[:250],
-            'state': status(call).capitalize(), 'date': shown,
-            'subtitle': ('now' if minutes <= 0 else f'in {when(minutes)}') + (f" · platform {call['platform']}" if call['platform'] else '')}
+            'state': status(call).capitalize(), 'date': shown, 'icon': ICONS.get(call['mode'], 'bus'), 'icon_label': label,
+            'subtitle': ('now' if minutes <= 0 else f'in {when(minutes)}') + (f" · platform {call['platform']}" if call['platform'] else '')
+                        + (' · replacement bus' if call['replacement'] else '')}
+
+
+VEHICLE_FIELD = {'key': 'modes', 'label': 'Vehicle types', 'optional': True, 'row': True,
+                 'options': [{'value': k, 'label': v} for k, v in VEHICLES.items()],
+                 'help': 'Optional. Tick the kinds of vehicle to show, for example only trains. None ticked shows everything. Replacement buses count as buses.'}
 
 
 class Sweden:
@@ -63,7 +73,10 @@ class Sweden:
               {'key': 'show', 'label': 'Show in the header', 'choices': [{'value': k, 'label': v} for k, v in SHOW.items()],
                'help': 'What the header chip and headline follow. The details always list both departures and arrivals.'},
               {'key': 'lines', 'label': 'Lines', 'placeholder': '9, 14, 123', 'optional': True,
-               'help': 'Optional line numbers, comma separated. Empty shows every line at the stop. Only the next 60 minutes are available.'}]
+               'help': 'Optional line numbers, comma separated. Empty shows every line at the stop. Only the next 60 minutes are available.'},
+              VEHICLE_FIELD]
+
+    MODE = {'BUS': 'bus', 'TRAIN': 'train', 'TRAM': 'tram', 'METRO': 'metro', 'BOAT': 'boat'}
 
     def validate_stop(self, config):
         stop = str(config.get('stop', '')).strip()
@@ -83,7 +96,10 @@ class Sweden:
         calls = []
         for call in data[kind]:
             route = call['route']
-            calls.append({'line': str(route.get('designation') or route.get('name') or '?'), 'mode': route.get('transport_mode') or '',
+            # 714 is the standard GTFS extended route type for a rail replacement bus; not yet seen in Trafiklab's data.
+            replacement = route.get('transport_mode_code') == 714
+            calls.append({'line': str(route.get('designation') or route.get('name') or '?'), 'replacement': replacement,
+                          'mode': 'bus' if replacement else self.MODE.get(route.get('transport_mode'), ''),
                           'direction': route.get('direction') or (route.get('destination') or {}).get('name') or '',
                           'origin': (route.get('origin') or {}).get('name') or '',
                           'platform': (call.get('realtime_platform') or {}).get('designation') or '',
@@ -112,11 +128,12 @@ class Norway:
                'help': 'What the header chip and headline follow. The details always list both departures and arrivals.'},
               {'key': 'lines', 'label': 'Lines', 'placeholder': 'R14, L1, 31', 'optional': True,
                'help': 'Optional line codes, comma separated. Empty shows every line at the stop. Only the next 60 minutes are shown.'},
+              VEHICLE_FIELD,
               {'key': 'client_name', 'label': 'Client name', 'placeholder': 'homelab_homedash', 'optional': True,
                'help': 'Entur asks every app to identify itself in the form company-application, lowercase. The default is fine for a home setup.'}]
-    MODE = {'rail': 'TRAIN', 'bus': 'BUS', 'coach': 'BUS', 'tram': 'TRAM', 'metro': 'METRO', 'water': 'BOAT', 'air': 'AIR'}
+    MODE = {'rail': 'train', 'bus': 'bus', 'coach': 'bus', 'tram': 'tram', 'metro': 'metro', 'water': 'boat'}
     QUERY = ('query($id:String!){ stopPlace(id:$id){ name estimatedCalls(numberOfDepartures:100, timeRange:3600%s){ realtime cancellation %s '
-             'destinationDisplay{frontText} quay{publicCode} serviceJourney{ line{publicCode name transportMode} quays(first:1){ name stopPlace{ name } } } } } }')
+             'destinationDisplay{frontText} quay{publicCode} serviceJourney{ transportSubmode line{publicCode name transportMode} quays(first:1){ name stopPlace{ name } } } } } }')
 
     @staticmethod
     def utcnow():
@@ -157,7 +174,10 @@ class Norway:
             offset = aimed.utcoffset()
             journey = call['serviceJourney']
             line, origin = journey['line'], (journey.get('quays') or [{}])[0]
-            calls.append({'line': str(line.get('publicCode') or line.get('name') or '?'), 'mode': self.MODE.get(line.get('transportMode'), ''),
+            # Entur calls a replacement bus's line "rail"; only the submode says it is a bus.
+            replacement = journey.get('transportSubmode') == 'railReplacementBus'
+            calls.append({'line': str(line.get('publicCode') or line.get('name') or '?'), 'replacement': replacement,
+                          'mode': 'bus' if replacement else self.MODE.get(line.get('transportMode'), ''),
                           'direction': (call.get('destinationDisplay') or {}).get('frontText') or '',
                           'origin': (origin.get('stopPlace') or {}).get('name') or origin.get('name') or '',
                           'platform': (call.get('quay') or {}).get('publicCode') or '',
@@ -191,10 +211,14 @@ class Departures:
         lines = list(dict.fromkeys(t.strip() for t in str(config.get('lines', '')).split(',') if t.strip()))
         if len(lines) > 6 or any(not re.fullmatch(r'[\w ]{1,10}', t) for t in lines):
             raise ValueError('Enter up to 6 line numbers, comma separated')
+        modes = list(dict.fromkeys(t.strip() for t in str(config.get('modes', '')).split(',') if t.strip()))
+        if any(m not in VEHICLES for m in modes):
+            raise ValueError('Choose buses, trains, trams, metro or boats')
         show = str(config.get('show') or 'departures')
         if show not in SHOW:
             raise ValueError('Choose departures, arrivals or whichever is next')
-        return {'country': country, **provider.validate_stop(config), 'stop_name': str(config.get('stop_name', '')).strip()[:100], 'show': show, 'lines': ', '.join(lines)}
+        return {'country': country, **provider.validate_stop(config), 'stop_name': str(config.get('stop_name', '')).strip()[:100], 'show': show,
+                'lines': ', '.join(lines), 'modes': ', '.join(m for m in VEHICLES if m in modes)}
 
     async def board(self, provider, client, base, config, secret, kind, ttl):
         key = (provider.country_name, base, config['stop'], kind, secret)
@@ -218,7 +242,7 @@ class Departures:
         from . import Result
         config = self.validate(config)
         provider = self.provider(config)
-        show, wanted = config['show'], [t for t in config['lines'].split(', ') if t]
+        show, wanted, modes = config['show'], [t for t in config['lines'].split(', ') if t], [m for m in config['modes'].split(', ') if m]
         needed = KINDS if show == 'next' else (show,)
         fetched = dict(zip(KINDS, await asyncio.gather(
             *(self.board(provider, client, base, config, secret, k, provider.throttle if k in needed else provider.slow) for k in KINDS), return_exceptions=True)))
@@ -235,7 +259,8 @@ class Departures:
             found = []
             for call in data['calls']:
                 leaves = datetime.fromisoformat(call['realtime'])
-                if (wanted and call['line'].lower() not in (w.lower() for w in wanted)) or leaves < now - timedelta(minutes=1):
+                if ((wanted and call['line'].lower() not in (w.lower() for w in wanted)) or (modes and call['mode'] not in modes)
+                        or leaves < now - timedelta(minutes=1)):
                     continue
                 found.append((leaves, kind, call, max(0, round((leaves - now).total_seconds() / 60))))
             calls[kind] = sorted(found, key=lambda c: c[0])
@@ -247,8 +272,9 @@ class Departures:
             metrics.append({'label': f'Line {w}', 'value': when(nxt[3]) if nxt else '—', 'unit': tag + status(nxt[2]) if nxt else 'none within the hour'})
         if primary:
             leaves, kind, call, minutes = primary[0]
-            hero = {'icon': MODES.get(call['mode'], 'bus'), 'title': headline(call['line'], kind, show, minutes),
-                    'text': (f"{call['direction']} · {place}" if kind == 'departures' else f"from {call['origin'] or call['direction']} · {place}").strip(' ·')}
+            hero = {'icon': ICONS.get(call['mode'], 'bus'), 'title': headline(call['line'], kind, show, minutes),
+                    'text': ((f"{call['direction']} · {place}" if kind == 'departures' else f"from {call['origin'] or call['direction']} · {place}")
+                             + (' · replacement bus' if call['replacement'] else '')).strip(' ·')}
             summary = status(call)
         else:
             hero = {'icon': 'bus', 'title': 'Nothing due', 'text': f'in the next hour · {place}'.strip(' ·')}

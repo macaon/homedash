@@ -143,7 +143,7 @@ class DeparturesTests(unittest.TestCase):
     def test_validation_and_manifest(self):
         d = REGISTRY['departures']
         self.assertEqual(d.validate({'stop': ' 740000250 ', 'lines': '9, 14 ,9,42X'}),
-                         {'country': 'se', 'stop': '740000250', 'stop_name': '', 'show': 'departures', 'lines': '9, 14, 42X'})   # saved widgets default to Sweden and departures
+                         {'country': 'se', 'stop': '740000250', 'stop_name': '', 'show': 'departures', 'lines': '9, 14, 42X', 'modes': ''})   # saved widgets default to Sweden and departures
         self.assertEqual(d.validate({'stop': '740000250', 'show': 'next'})['show'], 'next')
         for bad in ({}, {'stop': 'abc'}, {'stop': '740000250', 'lines': '1,2,3,4,5,6,7'}, {'stop': '740000250', 'lines': 'a/b'}, {'stop': '740000250', 'show': 'both'}):
             with self.assertRaises(ValueError):
@@ -169,6 +169,54 @@ class DeparturesTests(unittest.TestCase):
             async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
                 return await REGISTRY['departures'].provider({}).search(client, 'Växjö', 'secret-key', {})
         self.assertEqual(asyncio.run(run()), [{'label': 'Växjö station · Bus, Train', 'values': {'stop': '740000250', 'stop_name': 'Växjö station'}}])
+
+    def test_every_row_has_a_vehicle_icon_and_label(self):
+        items = self.poll({'stop': '740000250', 'stop_name': '', 'lines': '9, 17519'}, dep=self.with_modes()).details['lists'][0]['items']
+        by = {i['title'].split(' ')[0]: i for i in items}
+        self.assertEqual((by['9']['icon'], by['9']['icon_label']), ('bus', 'Bus'))
+        self.assertEqual((by['17519']['icon'], by['17519']['icon_label']), ('train-front', 'Train'))
+        arrivals = self.poll({'stop': '740000250', 'stop_name': '', 'show': 'arrivals', 'lines': '17560'}).details['lists'][0]['items']
+        self.assertEqual((arrivals[0]['icon'], arrivals[0]['icon_label']), ('train-front', 'Train'))
+
+    @staticmethod
+    def with_modes():
+        return json.loads(json.dumps(DEPARTURES))
+
+    def test_vehicle_type_filter(self):
+        cfg = lambda modes: {'stop': '740000250', 'stop_name': '', 'modes': modes}
+        trains = self.poll(cfg('train'))
+        items = trains.details['lists'][0]['items']
+        self.assertTrue(items and {i['icon_label'] for i in items} == {'Train'})                 # only trains, no buses
+        self.assertEqual(trains.details['hero']['icon'], 'train-front')
+        buses = self.poll(cfg('bus')).details['lists'][0]['items']
+        self.assertEqual({i['icon_label'] for i in buses}, {'Bus'})
+        both = self.poll(cfg('bus, train')).details['lists'][0]['items']
+        self.assertEqual({i['icon_label'] for i in both}, {'Bus', 'Train'})
+        self.assertEqual(self.poll(cfg('tram')).details['hero']['title'], 'Nothing due')         # nothing of that kind here
+        self.assertEqual(self.poll(cfg('train'), arr=None).details['lists'][1]['items'][0]['icon_label'], 'Train')   # arrivals filtered too
+
+    def test_swedish_replacement_bus_is_a_bus(self):
+        data = self.with_modes()
+        train = next(c for c in data['departures'] if c['route']['transport_mode'] == 'TRAIN')
+        train['route']['transport_mode_code'] = 714                                                # GTFS extended type: rail replacement bus
+        line = train['route']['designation']
+        result = self.poll({'stop': '740000250', 'stop_name': '', 'modes': 'bus', 'lines': line}, dep=data)
+        item = result.details['lists'][0]['items'][0]
+        self.assertEqual((item['icon'], item['icon_label']), ('bus', 'Replacement bus'))
+        self.assertTrue(item['subtitle'].endswith('replacement bus'))
+        self.assertEqual((result.details['hero']['icon'], result.details['hero']['text'].split(' · ')[-1]), ('bus', 'replacement bus'))
+        self.assertEqual(self.poll({'stop': '740000250', 'stop_name': '', 'modes': 'train', 'lines': line}, dep=data).details['hero']['title'], 'Nothing due')
+
+    def test_mode_validation(self):
+        d = REGISTRY['departures']
+        self.assertEqual(d.validate({'stop': '740000250', 'modes': ' train , bus,train'})['modes'], 'bus, train')    # canonical order, no repeats
+        with self.assertRaises(ValueError):
+            d.validate({'stop': '740000250', 'modes': 'bus, plane'})
+        entry = next(p for p in manifest() if p['id'] == 'departures')
+        for country in ('se', 'no'):
+            field = next(f for f in entry['variants'][country]['fields'] if f['key'] == 'modes')
+            self.assertEqual([o['value'] for o in field['options']], ['bus', 'train', 'tram', 'metro', 'boat'])
+            self.assertTrue(field['optional'])
 
 
 ENTUR_DEPARTURES = json.loads((FIX / 'entur-departures-oslo-s.json').read_text())
@@ -245,10 +293,28 @@ class NorwayTests(unittest.TestCase):
         self.assertEqual(sorted(calls), ['arrivals', 'departures'])                           # one fetch of each, then served from the cache
         self.assertEqual((departures.Norway.throttle, departures.Norway.slow), (60, 180))      # Entur allows far more than Trafiklab
 
+    def test_vehicle_icons_and_replacement_buses(self):
+        items = self.poll({**NO, 'lines': 'L1, 70'}).details['lists'][0]['items']
+        self.assertEqual({(i['icon'], i['icon_label']) for i in items}, {('train-front', 'Train')})     # Oslo S is all rail in this fixture
+        data = json.loads(json.dumps(ENTUR_DEPARTURES))
+        l1 = data['data']['stopPlace']['estimatedCalls'][0]
+        self.assertEqual(l1['serviceJourney']['line']['transportMode'], 'rail')
+        l1['serviceJourney']['transportSubmode'] = 'railReplacementBus'                                  # Entur's line still says "rail"
+        departures.CACHE.clear()                                                                           # the earlier poll cached the unmodified data
+        result = self.poll({**NO, 'show': 'departures', 'lines': 'L1', 'modes': 'bus'}, dep=data)
+        item = result.details['lists'][0]['items'][0]
+        self.assertEqual((item['icon'], item['icon_label']), ('bus', 'Replacement bus'))
+        self.assertTrue(item['subtitle'].endswith('replacement bus'))
+        self.assertEqual(result.details['hero']['icon'], 'bus')
+        departures.CACHE.clear()
+        only_trains = self.poll({**NO, 'show': 'departures', 'lines': 'L1', 'modes': 'train'}, dep=data).details['lists'][0]['items']
+        self.assertTrue(all(i['icon_label'] == 'Train' for i in only_trains))                           # the replacement bus is not a train here
+        self.assertEqual(len(only_trains), len(self.poll({**NO, 'show': 'departures', 'lines': 'L1'}).details['lists'][0]['items']) - 1)
+
     def test_validation(self):
         d = REGISTRY['departures']
         self.assertEqual(d.validate({'country': 'no', 'stop': ' NSR:StopPlace:59872 ', 'lines': 'R14, L1'}),
-                         {'country': 'no', 'stop': 'NSR:StopPlace:59872', 'client_name': 'homelab_homedash', 'stop_name': '', 'show': 'departures', 'lines': 'R14, L1'})
+                         {'country': 'no', 'stop': 'NSR:StopPlace:59872', 'client_name': 'homelab_homedash', 'stop_name': '', 'show': 'departures', 'lines': 'R14, L1', 'modes': ''})
         for bad in ({'country': 'no', 'stop': '740000250'}, {'country': 'no', 'stop': 'NSR:Quay:1'}, {'country': 'se', 'stop': 'NSR:StopPlace:59872'},
                     {'country': 'no', 'stop': 'NSR:StopPlace:59872', 'client_name': 'Has Space'}, {'country': 'dk', 'stop': '1'}):
             with self.assertRaises(ValueError):
