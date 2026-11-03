@@ -107,7 +107,7 @@ class WeatherTests(unittest.TestCase):
         async def run():
             async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
                 return await search_cities(client, 'Stock holm')
-        self.assertEqual(asyncio.run(run()), [{'place': 'Stockholm, Sweden', 'latitude': '59.3294', 'longitude': '18.0687'}])
+        self.assertEqual(asyncio.run(run()), [{'label': 'Stockholm, Sweden', 'values': {'latitude': '59.3294', 'longitude': '18.0687', 'place': 'Stockholm, Sweden'}}])
 
 
 if __name__ == '__main__':

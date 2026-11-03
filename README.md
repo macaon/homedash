@@ -168,6 +168,22 @@ Weather is a header widget rather than a service card. Use **+ Add widget**, cho
 
 Data comes from [Open-Meteo](https://open-meteo.com/), which needs no API key. Your coordinates are sent to the API URL (default `https://api.open-meteo.com`), so point it at a self-hosted instance if you prefer. Units are °C and km/h.
 
+### Public transport alerts
+
+A header widget showing disruptions and planned works for regional buses and trains, from [Trafiklab](https://www.trafiklab.se/)'s GTFS Regional ServiceAlerts. Create a free Trafiklab project with **GTFS Regional Realtime** enabled and paste its API key as the token. Choose **+ Add widget → Public transport alerts**, then pick up to four regions.
+
+Alerts are published per regional operator, and train events are often in a neighbouring region's feed. For Krösatåg and the Alvesta works in Kronoberg, choose Kronoberg, Kalmar and Jönköping. The optional **Only show** box narrows the list to the bus lines or words you care about, for example `12, 111, Alvesta, tåg`: numbers match affected lines, other terms match the alert text.
+
+The feeds only contain what the operators publish as structured alerts, so this can be less than their own websites list. Each feed is fetched at most once every ten minutes however short the refresh interval is, to stay inside the free key's 30,000 calls a month. The alert format is binary GTFS-Realtime, read by a small built-in decoder; no extra dependency is needed.
+
+### Public transport departures
+
+A header widget showing the next departures at a stop, for all lines or only the ones you follow (for example `9, 14, 123`), with live delays where the operator provides them. It uses [Trafiklab](https://www.trafiklab.se/)'s Realtime APIs: create a free project with **Trafiklab Realtime APIs** enabled and paste its key as the token. Choose **+ Add → Widget → Public transport departures**, enter the key, then search for the stop by name.
+
+Live data is **not always available or accurate**, in any region. Many departures only have a timetable time and are shown as *Scheduled*, never as on time; the widget only says *On time*, *+5 min* or *Cancelled* when the operator supplies live data, and that data can still be late or wrong. Treat it as a guide. The API shows the next 60 minutes only, and the data is CC BY 4.0, so the panel credits Trafiklab.
+
+To stay inside the free key's limits (25 calls a minute, 100,000 a month), each stop is fetched at most once every two minutes however short the refresh interval is, and shared between widgets. HomeDash also stops polling this widget while nobody has the dashboard open, and backs off for two minutes after an error such as an exceeded quota.
+
 ### Private certificate authorities
 
 Administrators manage shared certificate trust under **settings cog → Trust**. Name an upload and select one or several public PEM/DER certificate files; PEM bundles are supported too. Upload a private CA root once and all service checks and OIDC logins can trust certificates signed by it. Duplicate certificates are ignored. The list shows each certificate's subject, expiry and SHA-256 fingerprint, with a removal action.
@@ -198,6 +214,8 @@ Each connector supplies:
 
 - `id`, `name`, `description`, `secret_label` and configuration `fields` for the UI.
 - `validate(config)` returning normalized configuration or raising `ValueError`.
+- A field with `options` (a list of `{value, label}`) renders as checkboxes and is stored comma-separated.
+- Optional `notice` text, shown as a callout in the editor; `search_ui` plus an async `search(client, query, secret)` returning `[{label, values}]` to add a lookup box that fills form fields; and `on_demand = True` for metered APIs, which are then polled only while the dashboard is open.
 - Optional `placement = 'header'` to show the connector as a header widget instead of on service cards, and `default_url` to prefill its API URL.
 - Async `poll(client, base_url, config, secret)` returning a `Result(status, summary, metrics, details)`; `details` is optional.
 

@@ -26,15 +26,17 @@ class Connector(Protocol):
     def validate(self, config: dict) -> dict: ...
     async def poll(self, client: httpx.AsyncClient, base: str, config: dict, secret: str) -> Result: ...
 
-async def fetch(client, url, headers=None, *, as_json=True):
+async def fetch(client, url, headers=None, *, as_json=True, raw=False):
     async with client.stream('GET', url, headers=headers or {}) as response:
-        if as_json or response.status_code >= 400:
+        if as_json or raw or response.status_code >= 400:
             response.raise_for_status()
         body = bytearray()
         async for chunk in response.aiter_bytes():
             body.extend(chunk)
             if len(body) > MAX_BODY:
                 raise ValueError('Response too large')
+        if raw:
+            return bytes(body)
         if as_json:
             import json
             return json.loads(body)
@@ -149,11 +151,13 @@ from .mylar import Mylar
 from .homeca import HomeCA
 from .bookstack import BookStack
 from .weather import Weather
+from .transit import Transit
+from .departures import Departures
 
-REGISTRY = {plugin.id:plugin for plugin in (HTTP(), Ping(), HomeAssistant(), Proxmox(), Audiobookshelf(), AudioBookRequest(), Bambuddy(), BookStack(), Immich(), Paperless(), Komga(), CalibreWeb(), Gitea(), Mylar(), HomeCA(), HomePod(), Weather())}
+REGISTRY = {plugin.id:plugin for plugin in (HTTP(), Ping(), HomeAssistant(), Proxmox(), Audiobookshelf(), AudioBookRequest(), Bambuddy(), BookStack(), Immich(), Paperless(), Komga(), CalibreWeb(), Gitea(), Mylar(), HomeCA(), HomePod(), Weather(), Transit(), Departures())}
 
 def manifest():
-    return [{'id':p.id,'name':p.name,'description':p.description,'secret_label':p.secret_label,'fields':p.fields,'placement':getattr(p,'placement','card'),'default_url':getattr(p,'default_url','')} for p in list(REGISTRY.values())]
+    return [{'id':p.id,'name':p.name,'description':p.description,'secret_label':p.secret_label,'fields':p.fields,'placement':getattr(p,'placement','card'),'default_url':getattr(p,'default_url',''),'search':getattr(p,'search_ui',None),'notice':getattr(p,'notice','')} for p in list(REGISTRY.values())]
 
 def validate_url(value):
     parsed=urlsplit(value.strip())

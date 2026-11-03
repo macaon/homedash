@@ -56,8 +56,11 @@ def condition(code, night=False):
 async def search_cities(client, query):
     from . import fetch
     data = await fetch(client, f'{GEOCODING}/v1/search?' + urlencode({'name': query, 'count': 6, 'language': 'en'}))
-    return [{'place': ', '.join(dict.fromkeys(filter(None, (r['name'], r.get('admin1'), r.get('country'))))),
-             'latitude': f"{r['latitude']:g}", 'longitude': f"{r['longitude']:g}"} for r in data.get('results', [])]
+    found = []
+    for r in data.get('results', []):
+        place = ', '.join(dict.fromkeys(filter(None, (r['name'], r.get('admin1'), r.get('country')))))
+        found.append({'label': place, 'values': {'latitude': f"{r['latitude']:g}", 'longitude': f"{r['longitude']:g}", 'place': place}})
+    return found
 
 
 class Weather:
@@ -67,6 +70,11 @@ class Weather:
     secret_label = ''
     placement = 'header'
     default_url = 'https://api.open-meteo.com'
+    search_ui = {'label': 'Find a city', 'placeholder': 'Stockholm'}
+
+    async def search(self, client, query, secret):
+        return await search_cities(client, query)
+
     fields = [{'key':'latitude','label':'Latitude','placeholder':'59.33','help':'Decimal degrees, −90 to 90. Search for a city above to fill this in.'},
               {'key':'longitude','label':'Longitude','placeholder':'18.07','help':'Decimal degrees, −180 to 180.'},
               {'key':'place','label':'Place name','placeholder':'Stockholm, Sweden','help':'Shown in the details panel.','optional':True}]

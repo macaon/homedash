@@ -717,6 +717,9 @@ def delete_connection(ident:str,user=Depends(current)):
     return {'ok':True}
 
 POLL_LOCKS={}
+# Connectors marked on_demand (metered APIs) are polled only while someone has the dashboard open.
+LAST_VIEW=0.0
+VIEWED_WITHIN=600
 POLL_CAPACITY=asyncio.Semaphore(4)
 
 async def poll_connection(row,force=False):
@@ -761,7 +764,8 @@ async def poll_connection(row,force=False):
 
 @app.get('/api/status')
 def status(user=Depends(current)):
-    now=time.time()
+    global LAST_VIEW
+    now=LAST_VIEW=time.time()
     with db() as c:
         rows=c.execute('SELECT connections.id,connections.interval,snapshots.payload FROM connections LEFT JOIN snapshots ON snapshots.connection_id=connections.id WHERE owner=?',(user['id'],)).fetchall()
     result={}
@@ -771,14 +775,30 @@ def status(user=Depends(current)):
         result[row['id']]=value
     return result
 
-@app.get('/api/geocode')
-async def geocode(q:str=Query(min_length=2,max_length=80),user=Depends(current)):
-    from connectors.weather import search_cities
+class SearchIn(BaseModel):
+    q: str = Field(min_length=2, max_length=80)
+    secret: str = Field(default='', max_length=8192)
+    connection_id: str | None = None
+
+@app.post('/api/search/{kind}')
+async def search(kind:str,body:SearchIn,user=Depends(current)):
+    """Lookups that help fill a connector form (cities, stops). A keyed lookup uses the typed key, else the saved one."""
+    plugin=REGISTRY.get(kind)
+    if not hasattr(plugin,'search'):
+        raise HTTPException(404)
+    key=body.secret
+    if plugin.secret_label and not key and body.connection_id:
+        with db() as c:
+            row=owned(c,'connections',body.connection_id,user)
+        if row['kind']==kind and row['secret_enc']:
+            key=secret_cipher().decrypt(row['secret_enc'].encode()).decode()
+    if plugin.secret_label and not key:
+        raise HTTPException(400,'Enter the API key first')
     try:
         async with connector_client(trusted_pem()) as http:
-            return await search_cities(http,q.strip())
+            return await plugin.search(http,body.q.strip(),key)
     except Exception:
-        raise HTTPException(502,'City search failed. Enter coordinates manually.')
+        raise HTTPException(502,'Search failed. Check the API key, or enter the details manually.')
 
 @app.post('/api/connections/{ident}/test')
 async def test_connection(ident:str,user=Depends(current)):
@@ -792,6 +812,8 @@ async def poll_loop():
         with db() as c:
             header=[k for k,p in REGISTRY.items() if getattr(p,'placement','')=='header']
             rows=[dict(row) for row in c.execute(f'SELECT * FROM connections WHERE EXISTS (SELECT 1 FROM cards WHERE cards.connection_id=connections.id) OR kind IN ({",".join("?"*len(header))})',header)]
+        viewed=time.time()-LAST_VIEW<VIEWED_WITHIN
+        rows=[r for r in rows if viewed or not getattr(REGISTRY.get(r['kind']),'on_demand',False)]
         await asyncio.gather(*(poll_connection(row) for row in rows))
         active={row['id'] for row in rows}
         for ident in list(POLL_LOCKS):
