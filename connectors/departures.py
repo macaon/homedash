@@ -43,7 +43,7 @@ class Departures:
               'and live times can be late, early or wrong, in any region. Treat them as a guide, not a guarantee. Data from Trafiklab.se.')
     search_ui = {'label': 'Find a stop', 'placeholder': 'Växjö station'}
     fields = [{'key': 'stop', 'label': 'Stop ID', 'placeholder': '740000250', 'help': 'Search for a stop above to fill this in.'},
-              {'key': 'stop_name', 'label': 'Stop name', 'placeholder': 'Växjö station', 'optional': True, 'help': 'Shown in the widget.'},
+              {'key': 'stop_name', 'label': 'Stop name', 'optional': True, 'hidden': True},   # filled in by the stop search; the widget's Name is what you rename
               {'key': 'lines', 'label': 'Lines', 'placeholder': '9, 14, 123', 'optional': True,
                'help': 'Optional line numbers, comma separated. Empty shows every line at the stop. Only the next 60 minutes are available.'}]
 

@@ -101,9 +101,10 @@ function placeDetails(){
  if(widget){
   trigger=anchor=document.querySelector(`[data-widget="${widget.id}"]`);
   if(!anchor)return;
-  [title,sub,connectionId,extra]=[widget.name,widget.config.place||'Live details',widget.id,'<div class="widget-actions"><button id="widget-edit">Edit</button><button class="danger" id="widget-remove">Remove</button></div>'];
+  [title,sub,connectionId,extra]=[widget.name,widget.config.place||widget.config.stop_name||'Live details',widget.id,'<div class="widget-actions"><button id="widget-edit">Edit</button><button id="widget-move">Move…</button><button class="danger" id="widget-remove">Remove</button></div>'];
   $('widgets').insertAdjacentHTML('afterend',liveDetails(title,sub,connectionId,extra));
   $('widget-edit').onclick=()=>widgetEditor(widget);
+  $('widget-move').onclick=()=>moveWidget(widget.id);
   $('widget-remove').onclick=()=>confirmRemove(`Remove ${widget.name} from your dashboard?`,async()=>{await api('/api/connections/'+widget.id,'DELETE');expandedWidget=null;await load();});
  }else{
   const selected=[...document.querySelectorAll('[data-card]')].find(el=>el.dataset.card===expandedCard);
@@ -116,16 +117,30 @@ function placeDetails(){
  const panel=$('service-live-details'),box=anchor.getBoundingClientRect();panel.style.setProperty('--pointer-x',`${box.left+box.width/2-panel.getBoundingClientRect().left}px`);
  $('close-live-details').onclick=()=>{expandedCard=expandedWidget=null;placeDetails();trigger?.focus();};
 }
+const isWidget=c=>plugins.find(p=>p.id===c.kind)?.placement==='header';
 function renderWidgets(){
- const items=catalog.connections.filter(c=>plugins.find(p=>p.id===c.kind)?.placement==='header');
+ const items=catalog.connections.filter(isWidget);
  if(!items.some(c=>c.id===expandedWidget))expandedWidget=null;
  $('widgets').hidden=!items.length;
- $('widgets').innerHTML=items.map(c=>`<button class="widget-chip" data-widget="${c.id}" aria-expanded="false" aria-controls="service-live-details"><span class="chip-icon"></span><span class="chip-name">${esc(c.name)}</span><span class="chip-text"></span></button>`).join('');
- $('widgets').querySelectorAll('[data-widget]').forEach(chip=>chip.onclick=()=>{expandedWidget=expandedWidget===chip.dataset.widget?null:chip.dataset.widget;expandedCard=null;placeDetails();renderStatus();});
+ $('widgets').innerHTML=items.map(c=>`<div class="widget-chip" role="button" tabindex="0" draggable="true" data-widget="${c.id}" aria-expanded="false" aria-controls="service-live-details" aria-label="${esc(c.name)} live details"><span class="chip-icon"></span><span class="chip-name">${esc(c.name)}</span><span class="chip-text"></span></div>`).join('');
+ let dragged;
+ $('widgets').querySelectorAll('[data-widget]').forEach(chip=>{
+  const toggle=()=>{expandedWidget=expandedWidget===chip.dataset.widget?null:chip.dataset.widget;expandedCard=null;placeDetails();renderStatus();};
+  chip.onclick=toggle;
+  chip.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}};
+  chip.addEventListener('dragstart',e=>{dragged=chip.dataset.widget;e.dataTransfer.setData('text/plain',dragged);e.dataTransfer.effectAllowed='move';chip.classList.add('dragging');});
+  chip.addEventListener('dragend',()=>{dragged=null;document.querySelectorAll('.widget-chip.dragging,.widget-chip.drop-target').forEach(n=>n.classList.remove('dragging','drop-target'));});
+  chip.addEventListener('dragover',e=>{if(dragged&&dragged!==chip.dataset.widget){e.preventDefault();chip.classList.add('drop-target');}});
+  chip.addEventListener('dragleave',()=>chip.classList.remove('drop-target'));
+  chip.addEventListener('drop',e=>{e.preventDefault();chip.classList.remove('drop-target');if(dragged)reorderWidgets(dragged,chip.dataset.widget);});
+ });
 }
+async function saveWidgetOrder(ids){await api('/api/order/widgets','PUT',{ids});}
+async function reorderWidgets(source,target){const ids=catalog.connections.filter(isWidget).map(c=>c.id);if(source===target||!ids.includes(source)||!ids.includes(target))return;ids.splice(ids.indexOf(source),1);ids.splice(ids.indexOf(target),0,source);try{await saveWidgetOrder(ids);await load();}catch(e){toast(e.message,true);}}
+function moveWidget(id){const items=catalog.connections.filter(isWidget),current=items.findIndex(c=>c.id===id);editor(`Move ${items[current].name}`,`<p class="mini">Choose a position. You can also drag widgets on the dashboard.</p><label>Position<select id="move-position">${items.map((c,i)=>`<option value="${i}" ${i===current?'selected':''}>${i+1}${i===current?' · current position':` · ${esc(c.name)}`}</option>`).join('')}</select></label>`,async()=>{const ids=items.map(c=>c.id);ids.splice(current,1);ids.splice(Number($('move-position').value),0,id);await saveWidgetOrder(ids);});}
 function widgetEditor(connection){
  const kinds=plugins.filter(p=>p.placement==='header');
- editor(connection?'Edit widget':'Add widget',`<label>Name<input id="f-name" required maxlength="80" value="${esc(connection?.name)}" placeholder="Home"></label><label>Type<select id="f-kind">${kinds.map(p=>`<option value="${p.id}" ${p.id===connection?.kind?'selected':''}>${esc(p.name)}</option>`).join('')}</select></label><div id="f-check-fields"></div>`,()=>api('/api/connections'+(connection?'/'+connection.id:''),connection?'PUT':'POST',readCheck($('f-kind').value,$('f-name').value)));
+ editor(connection?'Edit widget':'Add widget',`<label>Name<input id="f-name" required maxlength="80" value="${esc(connection?.name)}" placeholder="Home"></label><label>Type<select id="f-kind">${kinds.map(p=>`<option value="${p.id}" ${p.id===connection?.kind?'selected':''}>${esc(p.name)}</option>`).join('')}</select></label><div id="f-check-fields"></div>`,async()=>{const saved=await api('/api/connections'+(connection?'/'+connection.id:''),connection?'PUT':'POST',readCheck($('f-kind').value,$('f-name').value));try{await api('/api/connections/'+(connection?.id||saved.id)+'/test','POST',{});await refreshStatus();}catch{}});
  const fields=()=>{const plugin=kinds.find(p=>p.id===$('f-kind').value),lookup=plugin.search;
   $('f-check-fields').innerHTML=checkFields(connection,plugin.id,plugin.default_url);
   if(!lookup)return;
@@ -136,7 +151,11 @@ function widgetEditor(connection){
   const search=async()=>{const q=$('f-search').value.trim();if(q.length<2)return;go.disabled=true;box.textContent='Searching…';
    try{const found=await api('/api/search/'+plugin.id,'POST',{q,secret:$('f-secret')?.value||'',connection_id:connection?.kind===plugin.id?connection.id:null});
     box.innerHTML=found.length?found.map((r,i)=>`<button type="button" role="listitem" data-hit="${i}">${icon('map-pin')}${esc(r.label)}</button>`).join(''):'<p class="mini">No matches.</p>';
-    box.onclick=e=>{const hit=found[e.target.closest('[data-hit]')?.dataset.hit];if(!hit)return;for(const[key,value]of Object.entries(hit.values))if($('config-'+key))$('config-'+key).value=value;if(!$('f-name').value)$('f-name').value=hit.label.split(/[,·]/)[0].trim();box.innerHTML=`<p class="mini">Selected ${esc(hit.label)}</p>`;};
+    box.onclick=e=>{const hit=found[e.target.closest('[data-hit]')?.dataset.hit];if(!hit)return;
+     // Read the previous place before overwriting it: the Name follows the pick unless it was customised.
+     const label=hit.label.split(/[,·]/)[0].trim(),before=($('config-stop_name')?.value||$('config-place')?.value||'').split(/[,·]/)[0].trim();
+     for(const[key,value]of Object.entries(hit.values))if($('config-'+key))$('config-'+key).value=value;
+     if($('f-name').value===''||$('f-name').value===before)$('f-name').value=label;box.innerHTML=`<p class="mini">Selected ${esc(hit.label)}</p>`;};
    }catch(error){box.textContent=error.message;}finally{go.disabled=false;}};
   go.onclick=search;$('f-search').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();search();}};};
  $('f-kind').onchange=fields;fields();
@@ -154,7 +173,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){const menu=document
 function checkFields(connection,kind,defaultURL=''){
  const plugin=plugins.find(p=>p.id===kind);if(!plugin)return '';
  const same=connection?.kind===kind;
- return `<p class="mini connector-description">${esc(plugin.description)}</p>${plugin.notice?`<p class="callout" role="note"><strong>Please note</strong> ${esc(plugin.notice)}</p>`:''}<label>${kind==='ping'?'Hostname or IP address':kind==='http'?'Check URL':'API URL'}<input id="f-base" type="${kind==='ping'?'text':'url'}" required maxlength="2048" value="${esc(same?connection.base_url:defaultURL)}" placeholder="${kind==='ping'?'server.example.net or 192.0.2.10':'https://service.example.net'}"></label>${plugin.fields.map(f=>f.options?`<fieldset class="check-group"><legend>${esc(f.label)}</legend>${f.options.map(o=>`<label class="inline"><input type="checkbox" data-config="${f.key}" value="${esc(o.value)}" ${(same?connection.config[f.key]:'').split(/,\s*/).includes(o.value)?'checked':''}>${esc(o.label)}</label>`).join('')}<small>${esc(f.help)}</small></fieldset>`:`<label>${esc(f.label)}<input id="config-${f.key}" maxlength="2048" ${f.optional?'':'required'} value="${esc(same?connection.config[f.key]:'')}" placeholder="${esc(f.placeholder)}"><small>${esc(f.help)}</small></label>`).join('')}${plugin.secret_label?`<label>${esc(plugin.secret_label)}<input id="f-secret" type="password" maxlength="8192" autocomplete="new-password" ${same&&connection.secret_configured?'':'required'} placeholder="${same&&connection.secret_configured?'••••••••••••':''}"><small>${same&&connection.secret_configured?'Token saved. Leave blank to keep it.':'Stored encrypted; never returned to the browser.'}</small></label>`:''}<details class="help check-advanced"><summary>Refresh interval</summary><label>Refresh interval <small>seconds, 15–3600</small><input id="f-interval" type="number" min="15" max="3600" required value="${same?connection.interval:60}"></label></details>`;
+ return `<p class="mini connector-description">${esc(plugin.description)}</p>${plugin.notice?`<p class="callout" role="note"><strong>Please note</strong> ${esc(plugin.notice)}</p>`:''}<label>${kind==='ping'?'Hostname or IP address':kind==='http'?'Check URL':'API URL'}<input id="f-base" type="${kind==='ping'?'text':'url'}" required maxlength="2048" value="${esc(same?connection.base_url:defaultURL)}" placeholder="${kind==='ping'?'server.example.net or 192.0.2.10':'https://service.example.net'}"></label>${plugin.fields.map(f=>f.hidden?`<input type="hidden" id="config-${f.key}" value="${esc(same?connection.config[f.key]:'')}">`:f.options?`<fieldset class="check-group"><legend>${esc(f.label)}</legend>${f.options.map(o=>`<label class="inline"><input type="checkbox" data-config="${f.key}" value="${esc(o.value)}" ${(same?connection.config[f.key]:'').split(/,\s*/).includes(o.value)?'checked':''}>${esc(o.label)}</label>`).join('')}<small>${esc(f.help)}</small></fieldset>`:`<label>${esc(f.label)}<input id="config-${f.key}" maxlength="2048" ${f.optional?'':'required'} value="${esc(same?connection.config[f.key]:'')}" placeholder="${esc(f.placeholder)}"><small>${esc(f.help)}</small></label>`).join('')}${plugin.secret_label?`<label>${esc(plugin.secret_label)}<input id="f-secret" type="password" maxlength="8192" autocomplete="new-password" ${same&&connection.secret_configured?'':'required'} placeholder="${same&&connection.secret_configured?'••••••••••••':''}"><small>${same&&connection.secret_configured?'Token saved. Leave blank to keep it.':'Stored encrypted; never returned to the browser.'}</small></label>`:''}<details class="help check-advanced"><summary>Refresh interval</summary><label>Refresh interval <small>seconds, 15–3600</small><input id="f-interval" type="number" min="15" max="3600" required value="${same?connection.interval:60}"></label></details>`;
 }
 function readCheck(kind,name){const plugin=plugins.find(p=>p.id===kind);return {name,kind,base_url:$('f-base').value,config:Object.fromEntries(plugin.fields.map(f=>[f.key,f.options?[...document.querySelectorAll(`[data-config="${f.key}"]:checked`)].map(i=>i.value).join(', '):$('config-'+f.key).value])),secret:$('f-secret')?.value||'',interval:Number($('f-interval').value)};}
 async function cardEditor(card){

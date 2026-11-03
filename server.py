@@ -68,6 +68,8 @@ with db() as c:
     CREATE TABLE IF NOT EXISTS cards (id TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, group_id TEXT REFERENCES groups(id) ON DELETE SET NULL, name TEXT NOT NULL, url TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', icon TEXT NOT NULL DEFAULT 'grid', connection_id TEXT REFERENCES connections(id) ON DELETE SET NULL, position INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS snapshots (connection_id TEXT PRIMARY KEY REFERENCES connections(id) ON DELETE CASCADE, payload TEXT NOT NULL);
     ''')
+    if 'position' not in {r[1] for r in c.execute('PRAGMA table_info(connections)')}:
+        c.execute('ALTER TABLE connections ADD COLUMN position INTEGER NOT NULL DEFAULT 0')
     c.execute('INSERT OR IGNORE INTO settings VALUES (?,?)', ('session_secret', secrets.token_urlsafe(48)))
     SESSION_SECRET = c.execute('SELECT value FROM settings WHERE key=?', ('session_secret',)).fetchone()[0]
 app = FastAPI(title='HomeDash', docs_url=None, redoc_url=None, openapi_url=None)
@@ -579,7 +581,7 @@ def catalog(user=Depends(current)):
     with db() as c:
         return {'groups':[dict(r) for r in c.execute('SELECT id,name,position FROM groups WHERE owner=? ORDER BY position,id',(user['id'],))],
                 'cards':[dict(r) for r in c.execute('SELECT id,group_id,name,url,description,icon,connection_id,position FROM cards WHERE owner=? ORDER BY position,id',(user['id'],))],
-                'connections':[public_connection(r) for r in c.execute('SELECT * FROM connections WHERE owner=? ORDER BY name',(user['id'],))]}
+                'connections':[public_connection(r) for r in c.execute('SELECT * FROM connections WHERE owner=? ORDER BY position,name',(user['id'],))]}
 
 @app.post('/api/groups')
 def add_group(body:GroupIn,user=Depends(current)):
@@ -627,7 +629,7 @@ def inline_connection(c,body,user):
             c.execute('DELETE FROM snapshots WHERE connection_id=?',(ident,))
     else:
         ident=secrets.token_hex(12)
-        c.execute('INSERT INTO connections VALUES (?,?,?,?,?,?,?,?,?,?)',(ident,user['id'],settings.name,settings.kind,settings.base_url,config,encrypted,connection_ca(settings,old),settings.interval,1))
+        c.execute('INSERT INTO connections (id,owner,name,kind,base_url,config,secret_enc,ca_pem,interval,revision) VALUES (?,?,?,?,?,?,?,?,?,?)',(ident,user['id'],settings.name,settings.kind,settings.base_url,config,encrypted,connection_ca(settings,old),settings.interval,1))
     return ident
 
 @app.post('/api/cards')
@@ -658,14 +660,19 @@ def delete_card(ident:str,user=Depends(current)):
 
 @app.put('/api/order/{collection}')
 def reorder(collection:str,body:OrderIn,user=Depends(current)):
-    if collection not in ('cards','groups'):
+    if collection not in ('cards','groups','widgets'):
         raise HTTPException(404)
+    table='connections' if collection=='widgets' else collection
     with db() as c:
         c.execute('BEGIN IMMEDIATE')
-        expected={r[0] for r in c.execute(f'SELECT id FROM {collection} WHERE owner=?',(user['id'],))}
+        if collection=='widgets':
+            # Widgets are the header-placed connections; the connections behind cards are not ordered.
+            expected={r[0] for r in c.execute('SELECT id,kind FROM connections WHERE owner=?',(user['id'],)) if getattr(REGISTRY.get(r[1]),'placement','')=='header'}
+        else:
+            expected={r[0] for r in c.execute(f'SELECT id FROM {table} WHERE owner=?',(user['id'],))}
         if len(set(body.ids))!=len(body.ids) or set(body.ids)!=expected:
             raise HTTPException(400,'Order must contain each of your items exactly once. Refresh and try again.')
-        c.executemany(f'UPDATE {collection} SET position=? WHERE id=?',enumerate(body.ids))
+        c.executemany(f'UPDATE {table} SET position=? WHERE id=?',[(position,ident) for position,ident in enumerate(body.ids)])
     return {'ok':True}
 
 
@@ -697,7 +704,9 @@ def add_connection(body:ConnectionIn,user=Depends(current)):
     config,encrypted=connection_values(body)
     ident=secrets.token_hex(12)
     with db() as c:
-        c.execute('INSERT INTO connections VALUES (?,?,?,?,?,?,?,?,?,?)',(ident,user['id'],body.name,body.kind,body.base_url,config,encrypted,body.ca_pem,body.interval,1))
+        # New widgets go last; position only matters for header widgets (see /api/order/widgets).
+        position=c.execute('SELECT COALESCE(MAX(position),-1)+1 FROM connections WHERE owner=?',(user['id'],)).fetchone()[0]
+        c.execute('INSERT INTO connections (id,owner,name,kind,base_url,config,secret_enc,ca_pem,interval,revision,position) VALUES (?,?,?,?,?,?,?,?,?,?,?)',(ident,user['id'],body.name,body.kind,body.base_url,config,encrypted,body.ca_pem,body.interval,1,position))
     return {'id':ident}
 
 @app.put('/api/connections/{ident}')

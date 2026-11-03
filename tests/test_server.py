@@ -95,6 +95,22 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(self.client.put('/api/order/groups',json={'ids':[gb,ga]}).status_code,200)
         self.assertEqual(self.client.get('/api/catalog').json()['groups'][0]['id'],gb)
 
+    def test_widget_order_covers_only_header_connections(self):
+        def widget(name):
+            return self.client.post('/api/connections',json={'name':name,'kind':'weather','base_url':'https://api.open-meteo.com','config':{'latitude':'59.3','longitude':'18'}}).json()['id']
+        def widgets():
+            return [c['id'] for c in self.client.get('/api/catalog').json()['connections'] if c['kind']=='weather']
+        a,b,c=widget('Alpha'),widget('Beta'),widget('Gamma')
+        check=self.connection()
+        self.assertEqual(widgets(),[a,b,c])                       # new widgets are appended, not sorted by name
+        self.assertEqual(self.client.put('/api/order/widgets',json={'ids':[c,a,b]}).status_code,200)
+        self.assertEqual(widgets(),[c,a,b])
+        for ids in ([a,b],[a,a,b,c],[c,a,b,check],['foreign',a,b]):  # exact set of widgets only; card connections excluded
+            self.assertEqual(self.client.put('/api/order/widgets',json={'ids':ids}).status_code,400)
+        body={'name':'Renamed','kind':'weather','base_url':'https://api.open-meteo.com','config':{'latitude':'59.3','longitude':'18'}}
+        self.assertEqual(self.client.put('/api/connections/'+a,json=body).status_code,200)
+        self.assertEqual(widgets(),[c,a,b])                       # editing keeps the position
+
     def test_user_isolation(self):
         gid=self.group();cid=self.connection();aid=self.card(group_id=gid,connection_id=cid)
         self.client.post('/api/users',json={'username':'bob','password':PASSWORD})

@@ -289,7 +289,7 @@ The service editor includes the complete bundled Lucide Static 1.64.0 catalog. T
 
 Choose **Integration**, then **Connection**. New services default to **New connection**; saved checks of the selected type are listed by name and target host. Choosing a saved check shares its polling/results and shows its settings read-only. Choose New connection for an independent configuration. Editing a service selects its current check automatically. **None** creates a link without monitoring.
 
-Drag cards to reorder, or use **Move…** in a card's menu and select a position within its group using the keyboard.
+Drag cards to reorder, or use **Move…** in a card's menu and select a position within its group using the keyboard. Header widgets work the same way: drag the chips above the dashboard, or open a widget and choose **Move…**. Widgets keep their own order, separate from the cards.
 
 ### Publishing images
 
