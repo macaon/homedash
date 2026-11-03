@@ -170,6 +170,8 @@ Data comes from [Open-Meteo](https://open-meteo.com/), which needs no API key. Y
 
 ### Public transport alerts
 
+**Sweden only for now.** Both public transport widgets use [Trafiklab](https://www.trafiklab.se/), the Swedish open transport data portal, so they only cover Swedish operators and stops. The region list is the Swedish regional transport authorities, and stops are searched among Swedish stops. Other countries would need other data sources.
+
 A header widget showing disruptions and planned works for regional buses and trains, from [Trafiklab](https://www.trafiklab.se/)'s GTFS Regional ServiceAlerts. Create a free Trafiklab project with **GTFS Regional Realtime** enabled and paste its API key as the token. Choose **+ Add widget → Public transport alerts**, then pick up to four regions.
 
 Alerts are published per regional operator, and train events are often in a neighbouring region's feed. For Krösatåg and the Alvesta works in Kronoberg, choose Kronoberg, Kalmar and Jönköping. The optional **Only show** box narrows the list to the bus lines or words you care about, for example `12, 111, Alvesta, tåg`: numbers match affected lines, other terms match the alert text.
@@ -177,6 +179,8 @@ Alerts are published per regional operator, and train events are often in a neig
 The feeds only contain what the operators publish as structured alerts, so this can be less than their own websites list. Each feed is fetched at most once every ten minutes however short the refresh interval is, to stay inside the free key's 30,000 calls a month. The alert format is binary GTFS-Realtime, read by a small built-in decoder; no extra dependency is needed.
 
 ### Public transport times
+
+**Sweden only for now.** Both public transport widgets use [Trafiklab](https://www.trafiklab.se/), the Swedish open transport data portal, so they only cover Swedish operators and stops. The region list is the Swedish regional transport authorities, and stops are searched among Swedish stops. Other countries would need other data sources.
 
 A header widget for the next departures and arrivals at a stop, for all lines or only the ones you follow (for example `9, 14, 123`), with live delays where the operator provides them. It uses [Trafiklab](https://www.trafiklab.se/)'s Realtime APIs: create a free project with **Trafiklab Realtime APIs** enabled and paste its key as the token. Choose **+ Add → Widget → Public transport times**, enter the key, then search for the stop by name.
 
