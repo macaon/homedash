@@ -72,7 +72,7 @@ class Weather:
     default_url = 'https://api.open-meteo.com'
     search_ui = {'label': 'Find a city', 'placeholder': 'Stockholm'}
 
-    async def search(self, client, query, secret):
+    async def search(self, client, query, secret, config):
         return await search_cities(client, query)
 
     fields = [{'key':'latitude','label':'Latitude','placeholder':'59.33','help':'Decimal degrees, −90 to 90. Search for a city above to fill this in.'},

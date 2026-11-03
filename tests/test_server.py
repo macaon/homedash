@@ -111,6 +111,35 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(self.client.put('/api/connections/'+a,json=body).status_code,200)
         self.assertEqual(widgets(),[c,a,b])                       # editing keeps the position
 
+    def test_key_is_required_per_country_not_per_connector(self):
+        def create(config,secret='',kind='transit',url=None):
+            return self.client.post('/api/connections',json={'name':'T','kind':kind,'base_url':url or ('https://api.entur.io' if config.get('country')=='no' else 'https://opendata.samtrafiken.se'),'config':config,'secret':secret})
+        self.assertEqual(create({'country':'se','regions':'krono'}).status_code,400)                     # Sweden: Trafiklab key required
+        self.assertIn('token',create({'country':'se','regions':'krono'}).json()['detail'])
+        self.assertEqual(create({'country':'se','regions':'krono'},'a-key').status_code,200)
+        self.assertEqual(create({'regions':'krono'},'a-key').status_code,200)                           # saved widgets without a country are Swedish
+        self.assertEqual(create({'country':'no','filter':'Oslo'}).status_code,200)                      # Norway: no key
+        stored=create({'country':'no','filter':'Oslo'},'ignored-key')                                     # a key sent for a keyless country is dropped
+        self.assertEqual(stored.status_code,200)
+        with server.db() as c:
+            self.assertEqual(c.execute('SELECT secret_enc FROM connections WHERE id=?',(stored.json()['id'],)).fetchone()[0],'')
+        self.assertEqual(create({'country':'no'}).status_code,400)                                       # Norway needs a filter
+        self.assertEqual(create({'country':'dk','filter':'x'}).status_code,400)
+
+    def test_search_follows_the_selected_country(self):
+        from unittest.mock import patch
+        from connectors import departures
+        found=[{'label':'Oslo S, Oslo','values':{'stop':'NSR:StopPlace:59872','stop_name':'Oslo S'}}]
+        async def fake(self,client,query,secret,config):
+            return found
+        with patch.object(departures.Norway,'search',fake),patch.object(departures.Sweden,'search',fake):
+            post=lambda body:self.client.post('/api/search/departures',json=body)
+            self.assertEqual(post({'q':'oslo','config':{'country':'no'}}).json(),found)                  # Norway: no key needed
+            self.assertEqual(post({'q':'växjö','config':{'country':'se'}}).status_code,400)             # Sweden: key needed first
+            self.assertEqual(post({'q':'växjö','config':{'country':'se'},'secret':'k'}).json(),found)
+            self.assertEqual(post({'q':'oslo','config':{'country':'dk'}}).status_code,400)
+            self.assertEqual(self.client.post('/api/search/http',json={'q':'oslo'}).status_code,404)
+
     def test_user_isolation(self):
         gid=self.group();cid=self.connection();aid=self.card(group_id=gid,connection_id=cid)
         self.client.post('/api/users',json={'username':'bob','password':PASSWORD})

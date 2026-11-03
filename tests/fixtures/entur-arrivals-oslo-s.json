@@ -1,0 +1,387 @@
+{
+ "data": {
+  "stopPlace": {
+   "name": "Oslo S",
+   "estimatedCalls": [
+    {
+     "realtime": true,
+     "cancellation": false,
+     "aimedArrivalTime": "2026-11-03T16:11:00+01:00",
+     "expectedArrivalTime": "2026-11-03T16:12:54+01:00",
+     "destinationDisplay": {
+      "frontText": "Dal"
+     },
+     "quay": {
+      "publicCode": "11"
+     },
+     "serviceJourney": {
+      "line": {
+       "publicCode": "R13",
+       "name": "Drammen-Oslo S-Dal",
+       "transportMode": "rail"
+      },
+      "quays": [
+       {
+        "name": "Drammen stasjon",
+        "stopPlace": {
+         "name": "Drammen stasjon"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "realtime": false,
+     "cancellation": false,
+     "aimedArrivalTime": "2026-11-03T16:15:00+01:00",
+     "expectedArrivalTime": "2026-11-03T16:15:00+01:00",
+     "destinationDisplay": {
+      "frontText": "Oslo"
+     },
+     "quay": {
+      "publicCode": "15"
+     },
+     "serviceJourney": {
+      "line": {
+       "publicCode": "70",
+       "name": "Stockholm-Hallsberg-Karlstad-Oslo",
+       "transportMode": "rail"
+      },
+      "quays": [
+       {
+        "name": "Stockholm Centralstation",
+        "stopPlace": {
+         "name": "Stockholm Centralstation"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "realtime": true,
+     "cancellation": false,
+     "aimedArrivalTime": "2026-11-03T16:13:00+01:00",
+     "expectedArrivalTime": "2026-11-03T16:13:32+01:00",
+     "destinationDisplay": {
+      "frontText": "Ski"
+     },
+     "quay": {
+      "publicCode": "10"
+     },
+     "serviceJourney": {
+      "line": {
+       "publicCode": "L2",
+       "name": "Stabekk-Oslo S-Ski",
+       "transportMode": "rail"
+      },
+      "quays": [
+       {
+        "name": "Stabekk stasjon",
+        "stopPlace": {
+         "name": "Stabekk stasjon"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "realtime": true,
+     "cancellation": false,
+     "aimedArrivalTime": "2026-11-03T16:14:00+01:00",
+     "expectedArrivalTime": "2026-11-03T16:11:03+01:00",
+     "destinationDisplay": {
+      "frontText": "Stabekk"
+     },
+     "quay": {
+      "publicCode": "8"
+     },
+     "serviceJourney": {
+      "line": {
+       "publicCode": "L2",
+       "name": "Stabekk-Oslo S-Ski",
+       "transportMode": "rail"
+      },
+      "quays": [
+       {
+        "name": "Ski stasjon",
+        "stopPlace": {
+         "name": "Ski stasjon"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "realtime": true,
+     "cancellation": false,
+     "aimedArrivalTime": "2026-11-03T16:16:00+01:00",
+     "expectedArrivalTime": "2026-11-03T16:16:01+01:00",
+     "destinationDisplay": {
+      "frontText": "Drammen"
+     },
+     "quay": {
+      "publicCode": "5"
+     },
+     "serviceJourney": {
+      "line": {
+       "publicCode": "R13",
+       "name": "Drammen-Oslo S-Dal",
+       "transportMode": "rail"
+      },
+      "quays": [
+       {
+        "name": "Dal stasjon",
+        "stopPlace": {
+         "name": "Dal stasjon"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "realtime": true,
+     "cancellation": false,
+     "aimedArrivalTime": "2026-11-03T16:19:00+01:00",
+     "expectedArrivalTime": "2026-11-03T16:19:00+01:00",
+     "destinationDisplay": {
+      "frontText": "Stabekk"
+     },
+     "quay": {
+      "publicCode": "2"
+     },
+     "serviceJourney": {
+      "line": {
+       "publicCode": "FLY2",
+       "name": "FLY2",
+       "transportMode": "rail"
+      },
+      "quays": [
+       {
+        "name": "Oslo lufthavn stasjon",
+        "stopPlace": {
+         "name": "Oslo lufthavn stasjon"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "realtime": true,
+     "cancellation": false,
+     "aimedArrivalTime": "2026-11-03T16:19:00+01:00",
+     "expectedArrivalTime": "2026-11-03T16:19:13+01:00",
+     "destinationDisplay": {
+      "frontText": "Moss"
+     },
+     "quay": {
+      "publicCode": "11"
+     },
+     "serviceJourney": {
+      "line": {
+       "publicCode": "R21",
+       "name": "Stabekk-Oslo S-Moss",
+       "transportMode": "rail"
+      },
+      "quays": [
+       {
+        "name": "Stabekk stasjon",
+        "stopPlace": {
+         "name": "Stabekk stasjon"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "realtime": true,
+     "cancellation": false,
+     "aimedArrivalTime": "2026-11-03T16:21:00+01:00",
+     "expectedArrivalTime": "2026-11-03T16:21:00+01:00",
+     "destinationDisplay": {
+      "frontText": "Eidsvoll"
+     },
+     "quay": {
+      "publicCode": "10"
+     },
+     "serviceJourney": {
+      "line": {
+       "publicCode": "RE11",
+       "name": "Eidsvoll-Oslo S-Skien",
+       "transportMode": "rail"
+      },
+      "quays": [
+       {
+        "name": "Drammen stasjon",
+        "stopPlace": {
+         "name": "Drammen stasjon"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "realtime": true,
+     "cancellation": false,
+     "aimedArrivalTime": "2026-11-03T16:23:00+01:00",
+     "expectedArrivalTime": "2026-11-03T16:23:00+01:00",
+     "destinationDisplay": {
+      "frontText": "Lillestrøm"
+     },
+     "quay": {
+      "publicCode": "9"
+     },
+     "serviceJourney": {
+      "line": {
+       "publicCode": "L1",
+       "name": "Spikkestad-Oslo S-Lillestrøm",
+       "transportMode": "rail"
+      },
+      "quays": [
+       {
+        "name": "Asker stasjon",
+        "stopPlace": {
+         "name": "Asker stasjon"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "realtime": true,
+     "cancellation": false,
+     "aimedArrivalTime": "2026-11-03T16:24:00+01:00",
+     "expectedArrivalTime": "2026-11-03T16:25:08+01:00",
+     "destinationDisplay": {
+      "frontText": "Asker"
+     },
+     "quay": {
+      "publicCode": "8"
+     },
+     "serviceJourney": {
+      "line": {
+       "publicCode": "L1",
+       "name": "Spikkestad-Oslo S-Lillestrøm",
+       "transportMode": "rail"
+      },
+      "quays": [
+       {
+        "name": "Lillestrøm stasjon",
+        "stopPlace": {
+         "name": "Lillestrøm stasjon"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "realtime": true,
+     "cancellation": false,
+     "aimedArrivalTime": "2026-11-03T16:26:00+01:00",
+     "expectedArrivalTime": "2026-11-03T16:26:00+01:00",
+     "destinationDisplay": {
+      "frontText": "Drammen"
+     },
+     "quay": {
+      "publicCode": "5"
+     },
+     "serviceJourney": {
+      "line": {
+       "publicCode": "RE10",
+       "name": "Drammen-Oslo S-Lillehammer",
+       "transportMode": "rail"
+      },
+      "quays": [
+       {
+        "name": "Lillehammer stasjon",
+        "stopPlace": {
+         "name": "Lillehammer stasjon"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "realtime": true,
+     "cancellation": false,
+     "aimedArrivalTime": "2026-11-03T16:29:00+01:00",
+     "expectedArrivalTime": "2026-11-03T16:29:00+01:00",
+     "destinationDisplay": {
+      "frontText": "Ski"
+     },
+     "quay": {
+      "publicCode": "10"
+     },
+     "serviceJourney": {
+      "line": {
+       "publicCode": "L2",
+       "name": "Stabekk-Oslo S-Ski",
+       "transportMode": "rail"
+      },
+      "quays": [
+       {
+        "name": "Lysaker stasjon",
+        "stopPlace": {
+         "name": "Lysaker stasjon"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "realtime": true,
+     "cancellation": false,
+     "aimedArrivalTime": "2026-11-03T16:29:00+01:00",
+     "expectedArrivalTime": "2026-11-03T16:29:00+01:00",
+     "destinationDisplay": {
+      "frontText": "Lysaker"
+     },
+     "quay": {
+      "publicCode": "7"
+     },
+     "serviceJourney": {
+      "line": {
+       "publicCode": "L2",
+       "name": "Stabekk-Oslo S-Ski",
+       "transportMode": "rail"
+      },
+      "quays": [
+       {
+        "name": "Ski stasjon",
+        "stopPlace": {
+         "name": "Ski stasjon"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "realtime": true,
+     "cancellation": false,
+     "aimedArrivalTime": "2026-11-03T16:32:00+01:00",
+     "expectedArrivalTime": "2026-11-03T16:32:00+01:00",
+     "destinationDisplay": {
+      "frontText": "Drammen"
+     },
+     "quay": {
+      "publicCode": "2"
+     },
+     "serviceJourney": {
+      "line": {
+       "publicCode": "FLY1",
+       "name": "FLY1",
+       "transportMode": "rail"
+      },
+      "quays": [
+       {
+        "name": "Oslo lufthavn stasjon",
+        "stopPlace": {
+         "name": "Oslo lufthavn stasjon"
+        }
+       }
+      ]
+     }
+    }
+   ]
+  }
+ }
+}

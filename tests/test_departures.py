@@ -143,16 +143,22 @@ class DeparturesTests(unittest.TestCase):
     def test_validation_and_manifest(self):
         d = REGISTRY['departures']
         self.assertEqual(d.validate({'stop': ' 740000250 ', 'lines': '9, 14 ,9,42X'}),
-                         {'stop': '740000250', 'stop_name': '', 'show': 'departures', 'lines': '9, 14, 42X'})   # saved widgets default to departures
+                         {'country': 'se', 'stop': '740000250', 'stop_name': '', 'show': 'departures', 'lines': '9, 14, 42X'})   # saved widgets default to Sweden and departures
         self.assertEqual(d.validate({'stop': '740000250', 'show': 'next'})['show'], 'next')
         for bad in ({}, {'stop': 'abc'}, {'stop': '740000250', 'lines': '1,2,3,4,5,6,7'}, {'stop': '740000250', 'lines': 'a/b'}, {'stop': '740000250', 'show': 'both'}):
             with self.assertRaises(ValueError):
                 d.validate(bad)
         entry = next(p for p in manifest() if p['id'] == 'departures')
-        self.assertEqual((entry['placement'], entry['search']['label']), ('header', 'Find a stop'))
-        self.assertEqual([c['value'] for c in next(f for f in entry['fields'] if f['key'] == 'show')['choices']], ['departures', 'arrivals', 'next'])
-        self.assertIn('not always available or accurate', entry['notice'])
-        self.assertTrue(next(p for p in manifest() if p['id'] == 'transit')['notice'])
+        self.assertEqual((entry['placement'], [c['value'] for c in entry['countries']], entry['default_country']), ('header', ['se', 'no'], 'se'))
+        for country, secret in (('se', True), ('no', False)):
+            variant = entry['variants'][country]
+            self.assertEqual(variant['search']['label'], 'Find a stop')
+            self.assertEqual(bool(variant['secret_label']), secret)                       # Norway needs no key
+            self.assertEqual([c['value'] for c in next(f for f in variant['fields'] if f['key'] == 'show')['choices']], ['departures', 'arrivals', 'next'])
+            self.assertIn('not always available or accurate', variant['notice'])
+        self.assertIn('Trafiklab', entry['variants']['se']['notice'])
+        self.assertIn('Entur', entry['variants']['no']['notice'])
+        self.assertTrue(next(p for p in manifest() if p['id'] == 'transit')['variants']['se']['notice'])
 
     def test_stop_search(self):
         def handler(request):
@@ -161,8 +167,104 @@ class DeparturesTests(unittest.TestCase):
             return httpx.Response(200, json={'stop_groups': [{'id': '740000250', 'name': 'Växjö station', 'transport_modes': ['BUS', 'TRAIN'], 'stops': []}]})
         async def run():
             async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-                return await REGISTRY['departures'].search(client, 'Växjö', 'secret-key')
+                return await REGISTRY['departures'].provider({}).search(client, 'Växjö', 'secret-key', {})
         self.assertEqual(asyncio.run(run()), [{'label': 'Växjö station · Bus, Train', 'values': {'stop': '740000250', 'stop_name': 'Växjö station'}}])
+
+
+ENTUR_DEPARTURES = json.loads((FIX / 'entur-departures-oslo-s.json').read_text())
+ENTUR_ARRIVALS = json.loads((FIX / 'entur-arrivals-oslo-s.json').read_text())
+NO = {'country': 'no', 'stop': 'NSR:StopPlace:59872', 'stop_name': 'Oslo S', 'show': 'next', 'lines': ''}
+
+
+class NorwayTests(unittest.TestCase):
+    """Real Entur Journey Planner responses for Oslo S, captured 2026-11-03 around 16:10 Oslo time (+01:00)."""
+    def setUp(self):
+        departures.CACHE.clear()
+        departures.ERRORS.clear()
+        self.addCleanup(setattr, departures.Norway, 'utcnow', departures.Norway.utcnow)
+        departures.Norway.utcnow = staticmethod(lambda: datetime(2026, 11, 3, 15, 10, 0, tzinfo=__import__('datetime').timezone.utc))   # 16:10 in Oslo
+
+    def poll(self, config=None, dep=None, arr=None, calls=None):
+        def handler(request):
+            self.assertEqual((request.method, request.url.path), ('POST', '/journey-planner/v3/graphql'))
+            self.assertEqual(request.headers['ET-Client-Name'], 'homelab_homedash')
+            body = json.loads(request.content)
+            self.assertEqual(body['variables'], {'id': 'NSR:StopPlace:59872'})
+            kind = 'arrivals' if 'arrivalDeparture: arrivals' in body['query'] else 'departures'
+            if calls is not None:
+                calls.append(kind)
+            return httpx.Response(200, json=(arr or ENTUR_ARRIVALS) if kind == 'arrivals' else (dep or ENTUR_DEPARTURES))
+        async def run():
+            async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+                return await REGISTRY['departures'].poll(client, 'https://api.entur.io', config or NO, '')
+        return asyncio.run(run())
+
+    def test_both_lists_normalised_and_headline_is_whichever_comes_first(self):
+        result = self.poll()
+        deps, arrs = result.details['lists']
+        self.assertEqual((deps['heading'], arrs['heading']), ('Departures', 'Arrivals'))
+        self.assertEqual(deps['items'][0]['title'], 'L1 → ' + ENTUR_DEPARTURES['data']['stopPlace']['estimatedCalls'][0]['destinationDisplay']['frontText'])
+        self.assertEqual((deps['items'][0]['date'], deps['items'][0]['state']), ('16:11 → 16:12', '+1 min'))   # offset stripped: local time, live delay 60 s
+        first = arrs['items'][0]                                                               # sorted by when it really arrives
+        self.assertRegex(first['title'], r'^L2 ← \S')                                          # arrivals say where they come from
+        self.assertEqual((first['date'], first['state']), ('16:14 → 16:11', '-3 min'))        # live and three minutes early
+        self.assertEqual(result.details['hero']['title'], 'L2 arrives in 1 min')              # 16:11 arrival beats the 16:12 departure
+        self.assertRegex(result.details['hero']['text'], r'^from \S.* · Oslo S$')
+        self.assertIn('Entur', result.details['note'])
+        self.assertEqual(result.details['hero']['icon'], 'train-front')                        # rail
+
+    def test_line_filter_and_arrival_only_mode(self):
+        result = self.poll({**NO, 'show': 'arrivals', 'lines': 'R13, L2'})
+        self.assertEqual(result.details['lists'][0]['heading'], 'Arrivals')
+        self.assertEqual({i['title'].split(' ')[0] for i in result.details['lists'][0]['items']}, {'R13', 'L2'})
+        self.assertEqual(result.details['hero']['title'], 'L2 arrives in 1 min')
+        self.assertEqual([m['label'] for m in result.metrics], ['Line R13', 'Line L2'])
+
+    def test_not_live_cancelled_and_late(self):
+        data = json.loads(json.dumps(ENTUR_ARRIVALS))
+        calls = data['data']['stopPlace']['estimatedCalls']
+        by_line = lambda code: next(c for c in calls if c['serviceJourney']['line']['publicCode'] == code)
+        self.assertFalse(by_line('70')['realtime'])                                            # a bus the operator does not track live
+        late = by_line('RE11')
+        late['expectedArrivalTime'] = (datetime.fromisoformat(late['aimedArrivalTime']) + timedelta(minutes=5)).isoformat()
+        by_line('FLY2')['cancellation'] = True
+        items = self.poll({**NO, 'show': 'arrivals', 'lines': 'RE11, FLY2, 70'}, arr=data).details['lists'][0]['items']
+        by = {i['title'].split(' ')[0]: i for i in items}
+        self.assertEqual(by['70']['state'], 'Scheduled')                                       # never "on time" without live data
+        self.assertEqual((by['RE11']['state'], by['RE11']['date']), ('+5 min', '16:21 → 16:26'))
+        self.assertEqual(by['FLY2']['state'], 'Cancelled')
+
+    def test_unknown_stop_and_throttling(self):
+        with self.assertRaises(ValueError):
+            self.poll(dep={'data': {'stopPlace': None}}, config={**NO, 'show': 'departures'})
+        departures.CACHE.clear()
+        departures.ERRORS.clear()
+        calls = []
+        self.poll(calls=calls)
+        self.poll(calls=calls)
+        self.assertEqual(sorted(calls), ['arrivals', 'departures'])                           # one fetch of each, then served from the cache
+        self.assertEqual((departures.Norway.throttle, departures.Norway.slow), (60, 180))      # Entur allows far more than Trafiklab
+
+    def test_validation(self):
+        d = REGISTRY['departures']
+        self.assertEqual(d.validate({'country': 'no', 'stop': ' NSR:StopPlace:59872 ', 'lines': 'R14, L1'}),
+                         {'country': 'no', 'stop': 'NSR:StopPlace:59872', 'client_name': 'homelab_homedash', 'stop_name': '', 'show': 'departures', 'lines': 'R14, L1'})
+        for bad in ({'country': 'no', 'stop': '740000250'}, {'country': 'no', 'stop': 'NSR:Quay:1'}, {'country': 'se', 'stop': 'NSR:StopPlace:59872'},
+                    {'country': 'no', 'stop': 'NSR:StopPlace:59872', 'client_name': 'Has Space'}, {'country': 'dk', 'stop': '1'}):
+            with self.assertRaises(ValueError):
+                d.validate(bad)
+
+    def test_stop_search_uses_geocoder_and_client_name(self):
+        def handler(request):
+            self.assertEqual(request.url.host, 'api.entur.io')
+            self.assertEqual(request.url.path, '/geocoder/v3/autocomplete')
+            self.assertEqual((request.url.params['q'], request.url.params['layers']), ('oslo s', 'stopPlace'))
+            self.assertEqual(request.headers['ET-Client-Name'], 'my_name-homedash')
+            return httpx.Response(200, json={'features': [{'properties': {'id': 'NSR:StopPlace:59872', 'names': {'default': 'Oslo S', 'display': 'Oslo S, Oslo'}}}]})
+        async def run():
+            async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+                return await REGISTRY['departures'].provider({'country': 'no'}).search(client, 'oslo s', '', {'client_name': 'My_Name-HomeDash'})
+        self.assertEqual(asyncio.run(run()), [{'label': 'Oslo S, Oslo', 'values': {'stop': 'NSR:StopPlace:59872', 'stop_name': 'Oslo S'}}])
 
 
 if __name__ == '__main__':

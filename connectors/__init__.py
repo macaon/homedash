@@ -26,8 +26,9 @@ class Connector(Protocol):
     def validate(self, config: dict) -> dict: ...
     async def poll(self, client: httpx.AsyncClient, base: str, config: dict, secret: str) -> Result: ...
 
-async def fetch(client, url, headers=None, *, as_json=True, raw=False):
-    async with client.stream('GET', url, headers=headers or {}) as response:
+async def fetch(client, url, headers=None, *, as_json=True, raw=False, json=None):
+    # json: a request body, sent as a POST (GraphQL APIs); otherwise a GET.
+    async with client.stream('POST' if json is not None else 'GET', url, headers=headers or {}, json=json) as response:
         if as_json or raw or response.status_code >= 400:
             response.raise_for_status()
         body = bytearray()
@@ -38,8 +39,8 @@ async def fetch(client, url, headers=None, *, as_json=True, raw=False):
         if raw:
             return bytes(body)
         if as_json:
-            import json
-            return json.loads(body)
+            import json as jsonlib
+            return jsonlib.loads(body)
         return response.status_code
 
 class HTTP:
@@ -156,8 +157,21 @@ from .departures import Departures
 
 REGISTRY = {plugin.id:plugin for plugin in (HTTP(), Ping(), HomeAssistant(), Proxmox(), Audiobookshelf(), AudioBookRequest(), Bambuddy(), BookStack(), Immich(), Paperless(), Komga(), CalibreWeb(), Gitea(), Mylar(), HomeCA(), HomePod(), Weather(), Transit(), Departures())}
 
+def describe(p):
+    return {'secret_label':p.secret_label,'fields':p.fields,'default_url':getattr(p,'default_url',''),'search':getattr(p,'search_ui',None),'notice':getattr(p,'notice','')}
+
 def manifest():
-    return [{'id':p.id,'name':p.name,'description':p.description,'secret_label':p.secret_label,'fields':p.fields,'placement':getattr(p,'placement','card'),'default_url':getattr(p,'default_url',''),'search':getattr(p,'search_ui',None),'notice':getattr(p,'notice','')} for p in list(REGISTRY.values())]
+    entries=[]
+    for p in REGISTRY.values():
+        entry={'id':p.id,'name':p.name,'description':p.description,'placement':getattr(p,'placement','card'),**describe(p)}
+        # A connector that works differently per country lists its providers; the editor offers a Country choice and
+        # swaps in that provider's fields, key requirement, notice and lookup.
+        providers=getattr(p,'providers',None)
+        if providers:
+            entry.update(default_country=p.default_country,countries=[{'value':k,'label':v.country_name} for k,v in providers.items()],
+                         variants={k:describe(v) for k,v in providers.items()})
+        entries.append(entry)
+    return entries
 
 def validate_url(value):
     parsed=urlsplit(value.strip())

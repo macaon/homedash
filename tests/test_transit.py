@@ -9,6 +9,9 @@ from connectors.transit import lines, matches, parse_alerts
 
 # A real Kronoberg ServiceAlerts response (2026-11-03): five bus alerts.
 FIXTURE = (Path(__file__).parent / 'fixtures' / 'krono-alerts.pb').read_bytes()
+# Five real Entur alerts (2026-11-03): two RUT ones (one planned for 6 Nov, line 250), two duplicate NSB ones, one VYG.
+ENTUR = (Path(__file__).parent / 'fixtures' / 'entur-alerts.pb').read_bytes()
+ENTUR_NOW = 1793718000      # 2026-11-03 16:20 Oslo time: the RUT real-time alert and both NSB ones are active, the VYG one starts at 17:09
 NOW = 1793707200  # 2026-11-03 13:00 UTC, inside the alerts' windows
 
 
@@ -115,13 +118,18 @@ class TransitTests(unittest.TestCase):
 
     def test_validation_and_manifest(self):
         t = REGISTRY['transit']
-        self.assertEqual(t.validate({'regions': 'krono,klt, krono', 'filter': ' 12 , Växjö '}), {'regions': 'krono, klt', 'filter': '12, Växjö'})
+        self.assertEqual(t.validate({'regions': 'krono,klt, krono', 'filter': ' 12 , Växjö '}), {'country': 'se', 'regions': 'krono, klt', 'filter': '12, Växjö'})
         for bad in ({}, {'regions': 'nowhere'}, {'regions': 'sl,ul,krono,klt,jlt'}, {'regions': 'krono', 'filter': ','.join(map(str, range(9)))}):
             with self.assertRaises(ValueError):
                 t.validate(bad)
         entry = next(p for p in manifest() if p['id'] == 'transit')
         self.assertEqual(entry['placement'], 'header')
-        self.assertIn({'value': 'krono', 'label': 'Kronoberg'}, entry['fields'][0]['options'])
+        self.assertEqual([c['value'] for c in entry['countries']], ['se', 'no'])
+        self.assertEqual(entry['default_country'], 'se')
+        self.assertIn({'value': 'krono', 'label': 'Kronoberg'}, entry['variants']['se']['fields'][0]['options'])
+        self.assertTrue(entry['variants']['se']['secret_label'])
+        self.assertEqual(entry['variants']['no']['secret_label'], '')               # Norway needs no key
+        self.assertIn('Entur', entry['variants']['no']['notice'])
 
     def test_matches_helper(self):
         alert = {'header': 'Linje 12, 111', 'description': 'Hållplats Sjöudden', 'routes': ['9011007033100000']}
@@ -129,6 +137,53 @@ class TransitTests(unittest.TestCase):
         self.assertTrue(matches(alert, ['sjöudden']))
         self.assertFalse(matches(alert, ['2']))
         self.assertTrue(matches(alert, []))
+
+    def poll_no(self, config, calls=None):
+        def handler(request):
+            self.assertEqual(request.url.path, '/realtime/v1/gtfs-rt/alerts')
+            self.assertNotIn('key', request.url.params)
+            self.assertEqual(request.headers['ET-Client-Name'], config.get('client_name', 'homelab_homedash'))
+            if calls is not None:
+                calls.append(1)
+            return httpx.Response(200, content=ENTUR)
+        async def run():
+            async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+                return await REGISTRY['transit'].poll(client, 'https://api.entur.io', {'country': 'no', **config}, '')
+        return asyncio.run(run())
+
+    def test_norway_decodes_entur_feed_and_filters_by_operator_code(self):
+        time.time = lambda: ENTUR_NOW
+        self.assertEqual(len(parse_alerts(ENTUR)), 5)
+        result = self.poll_no({'filter': 'RUT'})
+        self.assertEqual([i['title'] for i in result.details['items']], ['Real time updates not working', 'Linje 250: Holdeplass Oksenøyveien blir ikke betjent.'])
+        self.assertEqual([i['state'] for i in result.details['items']], ['Now', 'Planned'])
+        self.assertEqual(result.details['hero'], {'icon': 'triangle-alert', 'title': '1 active', 'text': 'Norway · filter: RUT'})
+        planned = result.details['items'][1]
+        self.assertEqual(planned['date'], 'from 6 Nov')
+        self.assertEqual([m['value'] for m in result.metrics], ['1', '1'])
+
+    def test_norway_line_and_word_filters_and_duplicates(self):
+        time.time = lambda: ENTUR_NOW
+        self.assertEqual([i['title'] for i in self.poll_no({'filter': '250'}).details['items']][0][:9], 'Linje 250')   # whole number in the headline
+        self.assertEqual(len(self.poll_no({'filter': 'Gjøvik'}).details['items']), 1)                              # the two identical NSB alerts merge
+        self.assertEqual(self.poll_no({'filter': 'Bergen'}).details['hero']['title'], 'All clear')
+
+    def test_norway_validation_and_client_name(self):
+        t = REGISTRY['transit']
+        self.assertEqual(t.validate({'country': 'no', 'filter': ' Oslo , R14 '}), {'country': 'no', 'filter': 'Oslo, R14', 'client_name': 'homelab_homedash'})
+        self.assertEqual(t.validate({'country': 'no', 'filter': 'Oslo', 'client_name': ' Maja-HomeDash '})['client_name'], 'maja-homedash')
+        for bad in ({'country': 'no'}, {'country': 'no', 'filter': ' , '}, {'country': 'no', 'filter': 'Oslo', 'client_name': 'has space'},
+                    {'country': 'no', 'filter': 'Oslo', 'client_name': 'x'}, {'country': 'dk', 'filter': 'x'}):
+            with self.assertRaises(ValueError):
+                t.validate(bad)
+        self.assertEqual(t.provider({}).country_name, 'Sweden')                       # saved widgets without a country stay Swedish
+
+    def test_norway_feed_is_throttled_without_a_key(self):
+        time.time = lambda: ENTUR_NOW
+        calls = []
+        self.poll_no({'filter': 'RUT'}, calls)
+        self.poll_no({'filter': 'NSB'}, calls)
+        self.assertEqual(len(calls), 1)
 
 
 if __name__ == '__main__':

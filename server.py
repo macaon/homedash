@@ -679,6 +679,9 @@ def reorder(collection:str,body:OrderIn,user=Depends(current)):
 def connection_ca(body,old=None):
     return old['ca_pem'] if old and 'ca_pem' not in body.model_fields_set else body.ca_pem
 
+def provider(plugin,config):
+    return plugin.provider(config) if hasattr(plugin,'provider') else plugin
+
 def connection_values(body,old=None):
     certificate_pem(body.ca_pem)
     plugin=REGISTRY[body.kind]
@@ -686,16 +689,17 @@ def connection_values(body,old=None):
         config=plugin.validate(body.config)
     except ValueError as error:
         raise HTTPException(400,str(error))
+    needs_key=provider(plugin,config).secret_label     # some connectors only need a key in some countries
     encrypted=old['secret_enc'] if old and old['kind']==body.kind else ''
     if body.secret:
         if '\r' in body.secret or '\n' in body.secret:
             raise HTTPException(400,'Token must be a single line')
         encrypted=secret_cipher().encrypt(body.secret.encode()).decode()
-    if plugin.secret_label and not encrypted:
+    if needs_key and not encrypted:
         raise HTTPException(400,'An API token is required')
-    if plugin.secret_label and urlsplit(body.base_url).scheme!='https':
+    if needs_key and urlsplit(body.base_url).scheme!='https':
         raise HTTPException(400,'Use HTTPS for connections carrying API credentials')
-    if not plugin.secret_label:
+    if not needs_key:
         encrypted=''
     return json.dumps(config),encrypted
 
@@ -788,11 +792,16 @@ class SearchIn(BaseModel):
     q: str = Field(min_length=2, max_length=80)
     secret: str = Field(default='', max_length=8192)
     connection_id: str | None = None
+    config: dict[str,str] = Field(default_factory=dict, max_length=8)
 
 @app.post('/api/search/{kind}')
 async def search(kind:str,body:SearchIn,user=Depends(current)):
     """Lookups that help fill a connector form (cities, stops). A keyed lookup uses the typed key, else the saved one."""
     plugin=REGISTRY.get(kind)
+    try:
+        plugin=provider(plugin,body.config) if plugin else None
+    except ValueError:
+        raise HTTPException(400,'Choose a country first')
     if not hasattr(plugin,'search'):
         raise HTTPException(404)
     key=body.secret
@@ -805,7 +814,7 @@ async def search(kind:str,body:SearchIn,user=Depends(current)):
         raise HTTPException(400,'Enter the API key first')
     try:
         async with connector_client(trusted_pem()) as http:
-            return await plugin.search(http,body.q.strip(),key)
+            return await plugin.search(http,body.q.strip(),key,body.config)
     except Exception:
         raise HTTPException(502,'Search failed. Check the API key, or enter the details manually.')
 
