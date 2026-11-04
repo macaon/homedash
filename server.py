@@ -84,7 +84,9 @@ if ISSUER:
 
 # Password sign-ins are limited per source and account, and the real client address comes from a trusted proxy only.
 # HOMEDASH_TRUSTED_PROXIES lists the reverse proxy's address or network, for example 172.28.0.1 or 10.0.0.0/8.
-guard = LoginGuard(parse_networks(os.environ.get('HOMEDASH_TRUSTED_PROXIES', '')))
+# '*' trusts every peer (any proxy address works, but anyone who can reach the port can spoof X-Forwarded-For).
+_trusted = os.environ.get('HOMEDASH_TRUSTED_PROXIES', '')
+guard = LoginGuard(parse_networks('0.0.0.0/0, ::/0' if _trusted.strip() == '*' else _trusted))
 
 @app.middleware('http')
 async def boundary(request, call_next):
